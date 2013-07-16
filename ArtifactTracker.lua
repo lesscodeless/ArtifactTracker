@@ -1,8 +1,13 @@
 local addon, data = ...
 
--- Index number for artifact in Stonefield
-local index = 71
-local ARTIFACTS = data.artifacts
+-- Some arbitrary ArtifactTracker settings
+local area          = "Stonefield"        -- default area
+local index         = 71                  -- default artifact in area
+local ARTIFACTS     = data.artifacts
+local ARTIFACT_ICON = "Data\\UI\\item_icons\\scroll6a.dds"
+local rgba_gold     = {255/255, 215/255, 0, 2/3}
+local rgba_green    = {0, 0.25, 0, 1/2}
+local rgba          = rgba_green
 
 _ARTIFACTTRACKER = {}
 local AT = _ARTIFACTTRACKER
@@ -24,50 +29,16 @@ local default_settings = {
   relative   = false
 }
 
-local IDX_WOOD   = 1
-local IDX_ORE    = 2
-local IDX_PLANTS = 3
-local IDX_FISH   = 4
-
-local TRACK_ABILITIES = {
-  ["A71B6D2C0C5577022"] = IDX_WOOD,
-  ["A4211DDD7A2E97B42"] = IDX_ORE,
-  ["A1452B14895FE7728"] = IDX_PLANTS,
-  ["A295EECA15ADDAE79"] = IDX_FISH
-}
-
-local ACTIVE_ABILITIES = {
-  [IDX_WOOD]   = {active=false, counttrack=0, buff=false},
-  [IDX_ORE]    = {active=false, counttrack=0, buff=false},
-  [IDX_PLANTS] = {active=false, counttrack=0, buff=false},
-  [IDX_FISH]   = {active=false, counttrack=0, buff=false},
-}
-
-local TRKINDEX = {
-  ["MINING"] = IDX_ORE,
-  ["WOOD"]   = IDX_WOOD,
-  ["PLANTS"] = IDX_PLANTS,
-  ["FISH"]   = IDX_FISH
-}
-
-local ACTIVE_BUFFS = {}
-
-local TRACKLISTCHANGE = false
-
 local default_settings_node = {
-  [IDX_WOOD]   = {},
-  [IDX_ORE]    = {},
-  [IDX_PLANTS] = {},
-  [IDX_FISH]   = {},
-  version      = addon.toc.version
+  version = addon.toc.version
 }
 
 local SVLOADED = false
 local ITEMS    = data.ITEMS
 local LANG     = data.SYSLANG
 
-AT.ALLITEMS = {}
-AT.LOOKUP   = data.LOOKUP
+--AT.ALLITEMS = {}
+--AT.LOOKUP   = data.LOOKUP
 
 local ICONS     = {}
 local AT_ACTIVE = true
@@ -292,11 +263,11 @@ function AT.ScanCurrentMap()
     -- TODO: remove
     -- Modification, add custom item (artifact)
     local artifact = {}
-    artifact.id          = index                            -- original e.g.: "100000019,80000001DC0966E0"
-    artifact.description = "Artifact " .. index             -- original e.g.: "Sunken boat"
-    artifact.coordX      = ARTIFACTS.Stonefield[index][1]   -- east direction
-    artifact.coordY      = 1000                             -- up direction
-    artifact.coordZ      = ARTIFACTS.Stonefield[index][2]   -- south direction
+    artifact.id          = index                          -- original e.g.: "100000019,80000001DC0966E0"
+    artifact.description = area .. " Artifact " .. index  -- original e.g.: "Sunken boat"
+    artifact.coordX      = ARTIFACTS[area][index][1]      -- east direction
+    artifact.coordY      = 1000                           -- up direction
+    artifact.coordZ      = ARTIFACTS[area][index][2]      -- south direction
     print(string.format("Selected %q", artifact.description))
     AT.ShowMessage(artifact)
 
@@ -308,13 +279,13 @@ local rpt         = 0
 local last_update = 0
 
 function AT.CheckAbilities()
-  for x=1,4 do
-    if ACTIVE_ABILITIES[x].counttrack > 0 and ACTIVE_ABILITIES[x].active and ACTIVE_ABILITIES[x].buff == false then
-      AT.UI.alert[x].b:SetVisible(true)
-    else
-      AT.UI.alert[x].b:SetVisible(false)
-    end
-  end
+  --for x=1,4 do
+  --  if ACTIVE_ABILITIES[x].counttrack > 0 and ACTIVE_ABILITIES[x].active and ACTIVE_ABILITIES[x].buff == false then
+  --    AT.UI.alert[x].b:SetVisible(true)
+  --  else
+  --    AT.UI.alert[x].b:SetVisible(false)
+  --  end
+  --end
 end
 
 function AT.Event_System_Update_Begin(h)
@@ -344,19 +315,9 @@ function AT.Event_System_Update_Begin(h)
           pd.coordY and
           pd.coordZ
         then
-          local p_dx = prev_IUD.coordX - pd.coordX
-          local p_dy = prev_IUD.coordY - pd.coordY
-          local p_dz = prev_IUD.coordZ - pd.coordZ
-
-          -- TODO: remove
-          --if
-          --  prev_IUD.coordX ~= pd.coordX or
-          --  prev_IUD.coordY ~= pd.coordY or
-          --  prev_IUD.coordZ ~= pd.coordZ
-          --then
-          --  print(Utility.Serialize.Full(pd))
-          --end
-
+          local p_dx      = prev_IUD.coordX - pd.coordX
+          local p_dy      = prev_IUD.coordY - pd.coordY
+          local p_dz      = prev_IUD.coordZ - pd.coordZ
           local p_heading = math_atan(p_dx, p_dz)*180/math_pi
 
           -- For each artifact in list
@@ -490,10 +451,10 @@ function AT.Event_System_Update_Begin(h)
       prev_IUD = pd
     end
   end
-  if TRACKLISTCHANGE then
-    AT.CheckAbilities()
-    TRACKLISTCHANGE = false
-  end
+  --if TRACKLISTCHANGE then
+  --  AT.CheckAbilities()
+  --  TRACKLISTCHANGE = false
+  --end
 end
 
 function AT.CreateConfig(k, v)
@@ -503,15 +464,15 @@ function AT.CreateConfig(k, v)
   c:SetChecked(false)
   c:SetLayer(15)
   c:EventAttach(Event.UI.Checkbox.Change, function(self, h)
-    local d = data.LOOKUP[v.name[LANG]]
+    --local d = data.LOOKUP[v.name[LANG]]
     if c:GetChecked() then
       ArtifactTracker_Settings.tracked[v.name[LANG]] = true
-      TRACKLISTCHANGE = true
-      ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack+1
+      --TRACKLISTCHANGE = true
+      --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack+1
     else
       ArtifactTracker_Settings.tracked[v.name[LANG]] = nil
-      TRACKLISTCHANGE = true
-      ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack-1
+      --TRACKLISTCHANGE = true
+      --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack-1
     end
     AT.ScanCurrentMap()
   end, "Event.UI.Checkbox.Change")
@@ -529,6 +490,10 @@ function AT.CreateConfig(k, v)
   return c, i, t
 end
 
+
+--
+-- User interface setup: Diamond widget, Configuration screen, HUD compass list
+--
 function AT.BuildUI()
   AT.context = UI.CreateContext(addon.identifier)
 
@@ -537,39 +502,14 @@ function AT.BuildUI()
     icons     = {},
     dir       = {},
     configchk = {},
-    alert     = {}
   }
 
-  -- What are these for (?)
-  --local alerticon = {
-  --  [IDX_WOOD]   = "Data/UI/item_icons/wood3.dds",
-  --  [IDX_ORE]    = "Data/UI/item_icons/pick4.dds",
-  --  [IDX_PLANTS] = "Data/UI/item_icons/plant1.dds",
-  --  [IDX_FISH]   = "Data/UI/item_icons/fish_51.dds",
-  --}
-
-  for x=1,4 do
-    local b=UI.CreateFrame("Frame", "alertborder:"..x, AT.context)
-    --b:SetVisible(false)
-    b:SetBackgroundColor(1, 0, 0)
-    b:SetWidth(36)
-    b:SetHeight(36)
-    b:SetLayer(1)
-    local i = UI.CreateFrame("Texture", "alerticon:"..x, b)
-    i:SetWidth(32)
-    i:SetHeight(32)
-    i:SetPoint("TOPLEFT", b, "TOPLEFT", 2, 2)
-    i:SetLayer(10)
-    --i:SetTexture("Rift", alerticon[x])
-    AT.UI.alert[x] = {b=b, i=i}
-  end
-
-  -- Diamond icon
+  -- Diamond widget
   AT.UI.mm = UI.CreateFrame("Texture", "AT.UI.mm", AT.context)
   AT.UI.mm:SetHeight(36)
   AT.UI.mm:SetWidth(36)
 
-  -- Diamond icon, open configuration window (if not locked)
+  -- Diamond widget, open configuration window (if not locked)
   AT.UI.mm:EventAttach(Event.UI.Input.Mouse.Left.Click, function(self, h)
     if ArtifactTracker_Settings.locked or MINIMAPDOCKER ~= nil then
       AT.UI.config:SetVisible(not AT.UI.config:GetVisible())
@@ -577,7 +517,7 @@ function AT.BuildUI()
     end
   end, "Event.UI.Input.Mouse.Left.Click")
 
-  -- Diamond icon, drag and drop placement
+  -- Diamond widget, drag and drop placement
   AT.UI.mm:EventAttach(Event.UI.Input.Mouse.Left.Down, function(self, h)
     if MINIMAPDOCKER == nil and ArtifactTracker_Settings.locked == false then
       self.MouseDown = true
@@ -597,7 +537,7 @@ function AT.BuildUI()
       end
     end, "Event.UI.Input.Mouse.Left.Up")
 
-    -- Diamond icon, drag and drop placement
+    -- Diamond widget, drag and drop placement
     AT.UI.mm:EventAttach(Event.UI.Input.Mouse.Cursor.Move, function(self, h)
       if ArtifactTracker_Settings.locked == false then
         if self.MouseDown then
@@ -610,7 +550,7 @@ function AT.BuildUI()
       end
     end, "Event.UI.Input.Mouse.Cursor.Move")
 
-    -- Diamond icon, toggle placeable/clickable state
+    -- Diamond widget, toggle placeable/clickable state
     AT.UI.mm:EventAttach(Event.UI.Input.Mouse.Right.Click, function(self, h)
       self.MouseDown = false
       ArtifactTracker_Settings.locked = not ArtifactTracker_Settings.locked
@@ -670,12 +610,11 @@ function AT.BuildUI()
   end, "Event.UI.Input.Mouse.Cursor.Move")
 
   --local frm_metal  = nil
-  --local frm_wood   = nil
-  --local frm_plants = nil
   --local frm_fish   = nil
+  local frm_areas = nil
 
-  --local frm_p = nil
-  --local txt_w = 0
+  local frm_p = nil
+  local txt_w = 0
 
   ---- List of minerals
   --for k, v in pairs(ITEMS["MINING"]) do
@@ -692,42 +631,6 @@ function AT.BuildUI()
   --  frm_p = c
   --  ICONS[v.name[LANG]] = v.icon
   --  AT.ALLITEMS[v.name[LANG]] = IDX_ORE
-  --end
-
-  ---- List of wood
-  --frm_p = nil
-  --for k, v in pairs(ITEMS["WOOD"]) do
-  --  local c, i, t = AT.CreateConfig(k, v)
-  --  AT.UI.configchk[v.name[LANG]] = {c=c, i=i, t=t}
-  --  txt_w = math.max(txt_w, t:GetWidth())
-
-  --  if frm_p == nil then
-  --    frm_wood = c
-  --  else
-  --    c:SetPoint("TOPLEFT", frm_p, "BOTTOMLEFT", 0, 0)
-  --  end
-
-  --  frm_p = c
-  --  ICONS[v.name[LANG]] = v.icon
-  --  AT.ALLITEMS[v.name[LANG]] = IDX_WOOD
-  --end
-
-  ---- List of plants
-  --frm_p = nil
-  --for k, v in pairs(ITEMS["PLANTS"]) do
-  --  local c, i, t = AT.CreateConfig(k, v)
-  --  AT.UI.configchk[v.name[LANG]] = {c=c, i=i, t=t}
-  --  txt_w = math.max(txt_w, t:GetWidth())
-
-  --  if frm_p == nil then
-  --    frm_plants = c
-  --  else
-  --    c:SetPoint("TOPLEFT", frm_p, "BOTTOMLEFT", 0, 0)
-  --  end
-
-  --  frm_p = c
-  --  ICONS[v.name[LANG]] = v.icon
-  --  AT.ALLITEMS[v.name[LANG]] = IDX_PLANTS
   --end
 
   ---- List of fish
@@ -748,34 +651,81 @@ function AT.BuildUI()
   --  AT.ALLITEMS[v.name[LANG]] = IDX_FISH
   --end
 
-  --for k, v in pairs(AT.UI.configchk) do
-  --  v.t:SetWidth(txt_w)
-  --end
-  --
+  -- List of areas
+  for k,v in pairs(ARTIFACTS) do
+    local c, i, t
+c = UI.CreateFrame("RiftCheckbox", "cb"..k, AT.UI.config)
+c:SetWidth(24)
+c:SetHeight(24)
+c:SetChecked(false)
+c:SetLayer(15)
+c:EventAttach(Event.UI.Checkbox.Change, function(self, h)
+  --local d = data.LOOKUP[v.name[LANG]]
+  if c:GetChecked() then
+    --ArtifactTracker_Settings.tracked[v.name[LANG]] = true
+    --TRACKLISTCHANGE = true
+    --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack+1
+  else
+    --ArtifactTracker_Settings.tracked[v.name[LANG]] = nil
+    --TRACKLISTCHANGE = true
+    --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack-1
+  end
+  AT.ScanCurrentMap()
+end, "Event.UI.Checkbox.Change")
+local i = UI.CreateFrame("Texture", "i"..k, AT.UI.config)
+i:SetWidth(24)
+i:SetHeight(24)
+--i:SetTexture("Rift", v.icon)
+i:SetPoint("TOPLEFT", c, "TOPRIGHT", 2, 0)
+i:SetLayer(15)
+local t = UI.CreateFrame("Text", "t"..k, AT.UI.config)
+t:SetFontSize(12)
+t:SetText(k)
+t:SetPoint("CENTERLEFT", i, "CENTERRIGHT", 2, 0)
+t:SetLayer(15)
+
+    txt_w = math.max(txt_w, t:GetWidth())
+
+    if frm_p == nil then
+      frm_areas = c
+    else
+      c:SetPoint("TOPLEFT", frm_p, "BOTTOMLEFT", 0, 0)
+    end
+
+    frm_p = c;
+  end
+
+  for k, v in pairs(AT.UI.configchk) do
+    v.t:SetWidth(txt_w)
+  end
+
   local trl, trr, trt, trb
   trl, trt, trr, trb = AT.UI.config:GetTrimDimensions()
 
-  -- MOD
-  local frmht = 20
-  local txt_w = 100
-
-  ---- Placement of material lists
+  -- Placement of material lists
   local colwidth = 52 + txt_w
   --frm_metal:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, trt)
-  --frm_wood:SetPoint("TOPLEFT", frm_metal, "TOPLEFT", colwidth+2, 0)
-  --frm_plants:SetPoint("TOPLEFT", frm_wood, "TOPLEFT", colwidth+2, 0)
-  --frm_fish:SetPoint("TOPLEFT", frm_plants, "TOPLEFT", colwidth+2, 0)
+  --frm_fish:SetPoint("TOPLEFT", frm_metal, "TOPLEFT", colwidth+2, 0)
+  frm_areas:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, trt)
 
-  AT.UI.config:SetHeight(500)
+  -- Configuration window height
+  AT.UI.config:SetHeight(800)
 
-  --local frmht = math.max(#ITEMS["MINING"], #ITEMS["WOOD"], #ITEMS["PLANTS"], #ITEMS["FISH"])
+  --local frmht = math.max(#ITEMS["MINING"], #ITEMS["FISH"])
+  --local frmht = #ARTIFACTS              -- zero, wtf?
+  --local frmht = table.getn(ARTIFACTS)   -- zero, wtf?
+  local frmht = 0
+  for k,v in pairs(ARTIFACTS) do          -- make it work ffs
+    frmht = frmht + 1
+  end
 
-  --AT.UI.config:SetWidth((colwidth*4) + 10 + trl + trr)
-
+  -- Configuration window width
+  AT.UI.config:SetWidth((colwidth*4) + 10 + trl + trr)
 
   AT.UI.cfgoptions = UI.CreateFrame("Frame", "AT.UI.cfgoptions", AT.UI.config)
   AT.UI.cfgoptions:SetWidth((colwidth*4) + 10)
-  AT.UI.cfgoptions:SetHeight(60)
+  --AT.UI.cfgoptions:SetHeight(60)
+  AT.UI.cfgoptions:SetHeight(60+40)  -- +40 to compensate for "Show relative direction arrows"
   AT.UI.cfgoptions:SetLayer(1)
   AT.UI.cfgoptions:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, ((24 * frmht) + 8 + trt))
 
@@ -789,7 +739,7 @@ function AT.BuildUI()
   AT.UI.l_nodes:SetPoint("TOPLEFT", AT.UI.cfgoptions, "TOPLEFT", 2, 2)
   AT.UI.l_nodes:SetFontSize(14)
   AT.UI.l_nodes:SetLayer(5)
-  AT.UI.l_nodes:SetText("Number of nodes to display: ")
+  AT.UI.l_nodes:SetText("Number of bananas to display: ")
 
   -- Slider
   AT.UI.s_nodes = UI.CreateFrame("RiftSlider", "AT.UI.s_nodes", AT.UI.cfgoptions)
@@ -799,31 +749,8 @@ function AT.BuildUI()
   AT.UI.s_nodes:SetPoint("TOPLEFT", AT.UI.l_nodes, "BOTTOMLEFT", 16, 0)
   AT.UI.s_nodes:EventAttach(Event.UI.Slider.Change, function(self, h)
     ArtifactTracker_Settings.num_nodes = AT.UI.s_nodes:GetPosition()
-    AT.UI.l_nodes:SetText(string.format("Number of nodes to display: %d", ArtifactTracker_Settings.num_nodes))
+    AT.UI.l_nodes:SetText(string.format("Number of artifacts to display: %d", ArtifactTracker_Settings.num_nodes))
     AT.ScanCurrentMap()
-  end, "Event.UI.Slider.Change")
-
-
-  --
-  -- Config -> "Seconds to keep onscreen"
-  --
-
-  -- Text
-  AT.UI.l_duration = UI.CreateFrame("Text", "AT.UI.l_duration", AT.UI.cfgoptions)
-  AT.UI.l_duration:SetPoint("TOPLEFT", AT.UI.l_nodes, "TOPLEFT", (colwidth*2)+4, 2)
-  AT.UI.l_duration:SetFontSize(14)
-  AT.UI.l_duration:SetLayer(5)
-  AT.UI.l_duration:SetText("Seconds to keep onscreen: ")
-
-  -- Slider
-  AT.UI.s_duration = UI.CreateFrame("RiftSlider", "AT.UI.s_duration", AT.UI.cfgoptions)
-  AT.UI.s_duration:SetLayer(2)
-  AT.UI.s_duration:SetWidth(math.floor(colwidth*1.5))
-  AT.UI.s_duration:SetRange(0, 10)
-  AT.UI.s_duration:SetPoint("TOPLEFT", AT.UI.l_duration, "BOTTOMLEFT", 16, 0)
-  AT.UI.s_duration:EventAttach(Event.UI.Slider.Change, function(self, h)
-    ArtifactTracker_Settings.fade_time = AT.UI.s_duration:GetPosition()
-    AT.UI.l_duration:SetText(string.format("Seconds to keep onscreen: %d", ArtifactTracker_Settings.fade_time))
   end, "Event.UI.Slider.Change")
 
 
@@ -862,7 +789,8 @@ function AT.BuildUI()
   AT.UI.c_relative:SetWidth(24)
   AT.UI.c_relative:SetHeight(24)
   AT.UI.c_relative:SetLayer(5)
-  AT.UI.c_relative:SetPoint("TOPLEFT", AT.UI.l_duration, "BOTTOMLEFT", 0, 14)
+  --AT.UI.c_relative:SetPoint("TOPLEFT", AT.UI.l_duration, "BOTTOMLEFT", 0, 14)
+  AT.UI.c_relative:SetPoint("TOPLEFT", AT.UI.c_combat, "BOTTOMLEFT", 0, 14)
   AT.UI.c_relative:EventAttach(Event.UI.Checkbox.Change, function(self, h)
     ArtifactTracker_Settings.relative = AT.UI.c_relative:GetChecked()
   end, "Event.UI.Checkbox.Change")
@@ -884,10 +812,11 @@ function AT.BuildUI()
   AT.UI.configscale:SetWidth((colwidth*4) + 10)
   AT.UI.configscale:SetHeight(48)
   AT.UI.configscale:SetLayer(1)
-  AT.UI.configscale:SetBackgroundColor(0, 0.25, 0, 0.5)
+  AT.UI.configscale:SetBackgroundColor(rgba[1], rgba[2], rgba[3], rgba[4])
   AT.UI.configscale:SetPoint("TOPLEFT", AT.UI.cfgoptions, "BOTTOMLEFT", 0, 8)
 
-  AT.UI.config:SetHeight((24 * frmht) + 124 + trt + trb)
+  --AT.UI.config:SetHeight((24 * frmht) + 124 + trt + trb)
+  AT.UI.config:SetHeight((24 * frmht) + 124 + 40 + trt + trb)  -- +40 compensate for one additional check box
   
   AT.UI.configscale_ctr = UI.CreateFrame("Frame", "AT.UI.configscale_ctr", AT.UI.config)
   AT.UI.configscale_ctr:SetPoint("CENTER", AT.UI.configscale, "CENTER", 0, 0)
@@ -910,28 +839,29 @@ function AT.BuildUI()
   end, "Event.UI.Input.Mouse.Wheel.Back")
 
   -- Direction arrow
-  AT.UI.cs_d = UI.CreateFrame("Texture", "AT.UI.cs_d", AT.UI.config)
-  AT.UI.cs_d:SetPoint("TOPLEFT", AT.UI.configscale_ctr, "TOPLEFT", 0, 0)
-  AT.UI.cs_d:SetTexture(addon.identifier, "img/compass-N.png")
-  AT.UI.cs_d:SetLayer(5)
+  --AT.UI.cs_d = UI.CreateFrame("Texture", "AT.UI.cs_d", AT.UI.config)
+  --AT.UI.cs_d:SetPoint("TOPLEFT", AT.UI.configscale_ctr, "TOPLEFT", 0, 0)
+  --AT.UI.cs_d:SetTexture(addon.identifier, "img/compass-N.png")
+  --AT.UI.cs_d:SetLayer(5)
 
   -- Material icon
   --AT.UI.cs_i = UI.CreateFrame("Texture", "AT.UI.cs_i", AT.UI.config)
   --AT.UI.cs_i:SetPoint("TOPLEFT", AT.UI.cs_d, "TOPRIGHT", 0, 0)
   --AT.UI.cs_i:SetTexture("Rift", "Data\\UI\\item_icons\\ore02.dds")
   --AT.UI.cs_i:SetLayer(5)
+  AT.UI.cs_i = UI.CreateFrame("Texture", "AT.UI.cs_i", AT.UI.config)
+  AT.UI.cs_i:SetPoint("TOPLEFT", AT.UI.configscale_ctr, "TOPLEFT", 0, 0)
+  AT.UI.cs_i:SetTexture("Rift", ARTIFACT_ICON)
+  AT.UI.cs_i:SetLayer(5)
 
   -- Text
   AT.UI.cs_t = UI.CreateFrame("Text", "AT.UI.cs_t", AT.UI.config)
-  AT.UI.cs_t:SetPoint("CENTERLEFT", AT.UI.cs_d, "CENTERRIGHT", 0, 0)
+  AT.UI.cs_t:SetPoint("CENTERLEFT", AT.UI.cs_i, "CENTERRIGHT", 0, 0)
   AT.UI.cs_t:SetText("Artifact Tracker")
   AT.UI.cs_t:SetLayer(5)
 
 
-
   local fht = 0
-
-  --local bgcols = { {0,0,0}, {0,0,1}, {0,1,0}, {0,1,1}, {1,0,0}, {1,0,1}, {0.8,0.8,0.8} }
 
   for x=1,10 do
     AT.UI.msgframes[x] = UI.CreateFrame("Text", "AT.msgframe", AT.context)
@@ -946,11 +876,6 @@ function AT.BuildUI()
     if x > 1 then
       AT.UI.msgframes[x]:SetPoint("TOPLEFT", AT.UI.msgframes[x-1], "BOTTOMLEFT", 0, 0)
     end
---    if x <= 7 then
---      AT.UI.msgframes[x]:SetBackgroundColor(bgcols[x][1], bgcols[x][2], bgcols[x][3])
---      AT.UI.icons[x]:SetBackgroundColor(bgcols[x][1], bgcols[x][2], bgcols[x][3])
---      AT.UI.dir[x]:SetBackgroundColor(bgcols[x][1], bgcols[x][2], bgcols[x][3])
---    end
   end
 
   AT.UI.FRAMESIZE = UI.CreateFrame("Text", "AT.UI.FRAMESIZE", AT.context)
@@ -963,11 +888,7 @@ function AT.BuildUI()
   AT.UI.anchor:SetVisible(false)
   AT.UI.anchor:SetFontSize(14)
   AT.UI.anchor:SetText("Artifact Tracker")
-  -- Green header, white text
-  --AT.UI.anchor:SetBackgroundColor(0, 0.25, 0, 1)
-  --AT.UI.anchor:SetFontColor(1, 1, 1, 1)
-  -- Gold header, white text
-  AT.UI.anchor:SetBackgroundColor(255/255, 215/255, 0, 2/3)
+  AT.UI.anchor:SetBackgroundColor(rgba[1], rgba[2], rgba[3], rgba[4])
   AT.UI.anchor:SetFontColor(1, 1, 1, 1)
 
   -- HUD size, mouse wheel scroll up
@@ -1014,11 +935,6 @@ function AT.BuildUI()
     ArtifactTracker_Settings.try = AT.UI.msgframes[1]:GetTop()
   end, "Event.UI.Input.Mouse.Left.Up")
 
-  AT.UI.alert[1].b:SetPoint("BOTTOMLEFT", AT.UI.anchor, "TOPLEFT", 0, -5)
-  AT.UI.alert[2].b:SetPoint("TOPLEFT", AT.UI.alert[1].b, "TOPRIGHT", 5, 0)
-  AT.UI.alert[3].b:SetPoint("TOPLEFT", AT.UI.alert[2].b, "TOPRIGHT", 5, 0)
-  AT.UI.alert[4].b:SetPoint("TOPLEFT", AT.UI.alert[3].b, "TOPRIGHT", 5, 0)
-
 end
 
 function AT.Event_Addon_SavedVariables_Load_End(h, a)
@@ -1043,14 +959,14 @@ function AT.Event_Addon_SavedVariables_Load_End(h, a)
               for tkn in string.gmatch(ik, "[0-9]+") do cidx=cidx+1 cx[cidx]=tkn end
               newRTS[tk][zk][ik] = { x=cx[1], z=cx[2], y=cx[3], nodes = {} }
               for rk, rv in pairs(iv) do
-                lud = data.LOOKUP[rk]
-                if lud then
-                  newRTS[tk][zk][ik].nodes[lud.k] = true
-                else
-                  if errors[rk] == nil then
-                    errors[rk] = true
-                  end
-                end
+                --lud = data.LOOKUP[rk]
+                --if lud then
+                --  newRTS[tk][zk][ik].nodes[lud.k] = true
+                --else
+                --  if errors[rk] == nil then
+                --    errors[rk] = true
+                --  end
+                --end
               end
             end
           end
@@ -1058,8 +974,6 @@ function AT.Event_Addon_SavedVariables_Load_End(h, a)
 
         ArtifactTracker_Nodes = {}
         MergeTable(ArtifactTracker_Nodes, newRTS)
-      else
-        -- ArtifactTracker_Nodes.version = addon.toc.Version
       end
       ArtifactTracker_Nodes.version = addon.toc.Version
     end
@@ -1099,8 +1013,8 @@ function AT.Event_Addon_SavedVariables_Load_End(h, a)
     AT.UI.s_nodes:SetPosition(2)
     AT.UI.s_nodes:SetPosition(nn)
     local ft = ArtifactTracker_Settings.fade_time
-    AT.UI.s_duration:SetPosition(2)
-    AT.UI.s_duration:SetPosition(ft)
+    --AT.UI.s_duration:SetPosition(2)
+    --AT.UI.s_duration:SetPosition(ft)
     AT.UI.c_combat:SetChecked(ArtifactTracker_Settings.showcombat)
     AT.UI.c_relative:SetChecked(ArtifactTracker_Settings.relative)
     SVLOADED = true
@@ -1128,11 +1042,11 @@ function AT.ResizeElements()
   AT.UI.anchor:SetWidth(AT.UI.fht * 8)
 
   -- Direction
-  AT.UI.cs_d:SetWidth(AT.UI.fht)
-  AT.UI.cs_d:SetHeight(AT.UI.fht)
+  --AT.UI.cs_d:SetWidth(AT.UI.fht)
+  --AT.UI.cs_d:SetHeight(AT.UI.fht)
   -- Icon
-  --AT.UI.cs_i:SetWidth(AT.UI.fht)
-  --AT.UI.cs_i:SetHeight(AT.UI.fht)
+  AT.UI.cs_i:SetWidth(AT.UI.fht)
+  AT.UI.cs_i:SetHeight(AT.UI.fht)
   -- Text
   AT.UI.cs_t:SetFontSize(ArtifactTracker_Settings.fontsize)
   AT.UI.configscale_ctr:SetHeight(AT.UI.fht)
@@ -1155,55 +1069,10 @@ function AT.Event_System_Secure_Leave(h)
   end
 end
 
-local playerID = Inspect.Unit.Lookup("player")
 
-function AT.Event_Buff_Add(h, u, t)
-  if u == playerID then
-    for k,v in pairs(Inspect.Buff.Detail(u, t)) do
-      if TRACK_ABILITIES[v.abilityNew] then
-        ACTIVE_ABILITIES[TRACK_ABILITIES[v.abilityNew]].buff = true
-        ACTIVE_BUFFS[k] = TRACK_ABILITIES[v.abilityNew]
-        TRACKLISTCHANGE = true
-      end
-    end
-  end
-end
-
-function AT.Event_Buff_Remove(h, u, t)
-  if u == playerID then
-    for k,v in pairs(t) do
-      if ACTIVE_BUFFS[k] then
-        ACTIVE_ABILITIES[ACTIVE_BUFFS[k]].buff = false
-        ACTIVE_BUFFS[k] = nil
-        TRACKLISTCHANGE = true
-      end
-    end
-  end
-end
-
-function AT.Event_Unit_Availability_Full(h, t)
-  for k,v in pairs(t) do
-    if v == "player" then
-      Command.Event.Detach(Event.Unit.Availability.Full, nil, nil, nil, addon.identifier)
-      local adtl = Inspect.Ability.New.Detail(Inspect.Ability.New.List())
-      for k,v in pairs(TRACK_ABILITIES) do
-        if adtl[k] then
-          ACTIVE_ABILITIES[v].active = true
-        end
-      end
-      for k,v in pairs(Inspect.Buff.Detail("player", Inspect.Buff.List("player"))) do
-        if TRACK_ABILITIES[v.abilityNew] then
-          ACTIVE_ABILITIES[TRACK_ABILITIES[v.abilityNew]].buff = true
-        end
-      end
-      AT.CheckAbilities()
-      Command.Event.Attach(Event.Buff.Add, AT.Event_Buff_Add, "Event.Buff.Add")
-      Command.Event.Attach(Event.Buff.Remove, AT.Event_Buff_Remove, "Event.Buff.Remove")
-    end
-  end
-end
-
+--
 -- "Command line"
+--
 function AT.Command_Slash_Register(h, args)
   local r = {}
   for token in string.gmatch(args, "[^%s]+") do
@@ -1217,15 +1086,22 @@ function AT.Command_Slash_Register(h, args)
     print("/at dump database\tArtifact count per area.")
     print("/at dump map     \tCurrent minimap information.")
     print("/at dump player  \tPlayer information.")
-    print("/at set <number> \tSelect which artifact to track.")
-    print("/at add <number>\tSelect an additional artifact to track.")
-    print("/at remove <i>   \tRemove one artifact from the list.")
+    print("/at area <\"\">  \tSelect area to track artifacts in.")
+    print("/at set <#>      \tSelect which artifact to track.")
+    print("/at add <#>      \tSelect an additional artifact to track.")
+    print("/at remove <#>   \tRemove one artifact from the list.")
     print("/at clear          \tClear all tracking entries.")
     print("/at reset         \tReset addon to default settings.")
     print("")
+  elseif r[1] == "area" then
+    if ARTIFACTS[r[2]] == nil then
+      print("Error: Invalid area selected. Try \"/at dump database\"")
+    else
+      area = r[2]
+    end
   elseif r[1] == "dump" then
     if r[2] == nil then
-      print("Error: No second argument provided. Try /at help.")
+      print("Error: No second argument provided. Try \"/at help\".")
     elseif r[2] == "artifact" or r[2] == "a" then
       print("Current artifact:")
       print(Utility.Serialize.Full(artifact))
@@ -1246,9 +1122,12 @@ function AT.Command_Slash_Register(h, args)
       print(Utility.Serialize.Full(pd))
     end
   elseif r[1] == "set" then
+    if r[2] == nil then
+      print("Error: No second argument provided. Try /at help.")
+    end
     index = tonumber(r[2])
     if index == nil then
-      print("Invalid argument to \"set\".")
+      print("Error: Invalid argument to \"set\".")
     else
       print("Artifact index sucessfully set to:", index)
       AT.ScanCurrentMap()
@@ -1256,21 +1135,21 @@ function AT.Command_Slash_Register(h, args)
   elseif r[1] == "add" then
     local index = tonumber(r[2])
     if index == nil then
-      print("Invalid argument to \"add\".")
+      print("Error: Invalid argument to \"add\".")
     else
       local artifact = {}
-      artifact.id          = index                            -- original e.g.: "100000019,80000001DC0966E0"
-      artifact.description = "Artifact " .. index             -- original e.g.: "Sunken boat"
-      artifact.coordX      = ARTIFACTS.Stonefield[index][1]   -- east direction
-      artifact.coordY      = 1000                             -- up direction
-      artifact.coordZ      = ARTIFACTS.Stonefield[index][2]   -- south direction
+      artifact.id          = index                          -- original e.g.: "100000019,80000001DC0966E0"
+      artifact.description = area .. " Artifact " .. index  -- original e.g.: "Sunken boat"
+      artifact.coordX      = ARTIFACTS[area][index][1]      -- east direction
+      artifact.coordY      = 1000                           -- up direction
+      artifact.coordZ      = ARTIFACTS[area][index][2]      -- south direction
       print(string.format("Added %q", artifact.description))
       AT.Add(artifact)
     end
   elseif r[1] == "remove" then
     local index = tonumber(r[2])
     if index == nil then
-      print("Invalid argument to \"remove\".")
+      print("Error: Invalid argument to \"remove\".")
     else
       AT.Remove(i)
     end
@@ -1298,13 +1177,17 @@ function AT.Command_Slash_Register(h, args)
   end
 end
 
+
+--
+-- "Main"
+--
+
 AT.BuildUI()
 
 Command.Event.Attach(Event.System.Update.Begin, AT.Event_System_Update_Begin, "Event.System.Update.Begin")
 Command.Event.Attach(Event.Addon.SavedVariables.Load.End, AT.Event_Addon_SavedVariables_Load_End, "Event.Addon.SavedVariables.Load.End")
 Command.Event.Attach(Event.System.Secure.Leave, AT.Event_System_Secure_Leave, "Event.System.Secure.Leave")
 Command.Event.Attach(Event.System.Secure.Enter, AT.Event_System_Secure_Enter, "Event.System.Secure.Enter")
-Command.Event.Attach(Event.Unit.Availability.Full, AT.Event_Unit_Availability_Full, "Event.Unit.Availability.Full")
 Command.Event.Attach(Command.Slash.Register("artifacttracker"), AT.Command_Slash_Register, "Command.Slash.Register")
 Command.Event.Attach(Command.Slash.Register("at"), AT.Command_Slash_Register, "Command.Slash.Register")
 

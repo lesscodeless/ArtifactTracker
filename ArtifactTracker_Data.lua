@@ -250,7 +250,6 @@ for lk, lv in pairs(data.translate) do
   end
 end
 
-
 data.LOOKUP = {}
 
 for rk, rv in pairs(data.ITEMS) do
