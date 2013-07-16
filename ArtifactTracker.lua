@@ -9,6 +9,9 @@ local rgba_gold     = {255/255, 215/255, 0, 2/3}
 local rgba_green    = {0, 0.25, 0, 1/2}
 local rgba          = rgba_green
 
+area  = "Freemarch"
+index = 1
+
 _ARTIFACTTRACKER = {}
 local AT = _ARTIFACTTRACKER
 
@@ -175,6 +178,14 @@ local math_sqrt = math.sqrt
 local math_atan = math.atan2
 local math_abs  = math.abs
 local math_pi   = math.pi
+
+-- XYZ maps to East,Up,South in the game
+function AT.Distance(EUS1, EUS2)
+  local dx = EUS2[1]-EUS1[1]
+  local dy = EUS2[2]-EUS1[2]
+  local dz = EUS2[3]-EUS1[3]
+  return math_sqrt((dx^2)+(dy^2)+(dz^2))  -- distance
+end
 
 function AT.direction(dt)
   if dt >  180 then dt = dt-360 end
@@ -1087,6 +1098,7 @@ function AT.Command_Slash_Register(h, args)
     print("/at dump map     \tCurrent minimap information.")
     print("/at dump player  \tPlayer information.")
     print("/at area <\"\">  \tSelect area to track artifacts in.")
+    print("/at scan           \tScan and select the nearest artifact.")
     print("/at set <#>      \tSelect which artifact to track.")
     print("/at add <#>      \tSelect an additional artifact to track.")
     print("/at remove <#>   \tRemove one artifact from the list.")
@@ -1098,6 +1110,7 @@ function AT.Command_Slash_Register(h, args)
       print("Error: Invalid area selected. Try \"/at dump database\"")
     else
       area = r[2]
+      print("Area sucessfully set to:", area)
     end
   elseif r[1] == "dump" then
     if r[2] == nil then
@@ -1120,6 +1133,48 @@ function AT.Command_Slash_Register(h, args)
       local pd = Inspect.Unit.Detail("player")
       print("Player:")
       print(Utility.Serialize.Full(pd))
+    end
+  elseif r[1] == "scan" then
+    local pd          = Inspect.Unit.Detail("player")
+    local closest     = 999999
+    local close       = 999999
+    local distance    = nil
+    local cur_index   = 0
+    local best_index  = 0
+    local close_index = 0
+    for k,v in pairs(ARTIFACTS[area]) do
+      cur_index = cur_index + 1
+      distance  = AT.Distance({v[1], pd.coordY, v[2]}, {pd.coordX, pd.coordY, pd.coordZ})
+      print("k,v,d:", k, Utility.Serialize.Inline(v), distance)
+      if distance == nil then
+        print("Error: could not calculate distance.")
+        print(Utility.Serialize.Inline(pd))
+        print(Utility.Serialize.Inline(v))
+        break
+      end
+      if distance > 50 and distance < close then
+        close = distance
+        close_index = cur_index
+      end
+      if distance < closest then
+        print("closer")
+        closest    = distance
+        best_index = cur_index
+      end
+    end
+    if close_index == 0 then
+      print("Scanning done. No close artifact found.")
+    else
+      index = close_index
+      AT.ScanCurrentMap()
+      print("Scanning done. Close artifact: ", close_index)
+    end
+    if best_index == 0 then
+      print("Scanning done. No closest artifact found.")
+    else
+      --index = best_index
+      --AT.ScanCurrentMap()
+      print("Scanning done. Closest artifact: ", best_index)
     end
   elseif r[1] == "set" then
     if r[2] == nil then
