@@ -1,3 +1,10 @@
+--
+-- TODO:
+--  * auto-update artifact list
+--  * whilelist / blacklist
+--  * automatic detection of picked up artifacts
+--  * detect and group duplicates
+--
 local addon, data = ...
 
 -- Some arbitrary ArtifactTracker settings
@@ -39,9 +46,6 @@ local default_settings_node = {
 local SVLOADED = false
 local ITEMS    = data.ITEMS
 local LANG     = data.SYSLANG
-
---AT.ALLITEMS = {}
---AT.LOOKUP   = data.LOOKUP
 
 local ICONS     = {}
 local AT_ACTIVE = true
@@ -135,9 +139,10 @@ function AT.Event_Map_Remove(h, e)
     for k,v in pairs(MESSAGE_STACK) do
       if v.i == ed then
         if v.d <= 70 then
-          MESSAGE_STACK[k].t = Inspect.Time.Real()-100
+          MESSAGE_STACK[k].t = Inspect.Time.Real() - 100
         else
-          MESSAGE_STACK[k].t = Inspect.Time.Real()+ArtifactTracker_Settings.fade_time
+          MESSAGE_STACK[k].t = Inspect.Time.Real() +
+            ArtifactTracker_Settings.fade_time
         end
         break
       end
@@ -156,11 +161,15 @@ function AT.Event_Map_Add(h, e)
   --    if ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID] == nil then
   --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID] = {}
   --    end
-  --    if ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] == nil then
-  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] = {x=v.coordX, z=v.coordZ, y=v.coordY, nodes = {} }
+  --    if
+  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] == nil
+  --    then
+  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] =
+  --        {x=v.coordX, z=v.coordZ, y=v.coordY, nodes = {} }
   --    end
   --    local lud = data.LOOKUP[v.description]
-  --    ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix].nodes[lud.k] = true
+  --    ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix].nodes[lud.k]
+  --      = true
   --  end
   --end
 end
@@ -170,7 +179,12 @@ function AT.DumpCurrentMap()
   print(Utility.Serialize.Full(Inspect.Map.Detail(Inspect.Map.List())))
 
   --for k,v in pairs(Inspect.Map.Detail(Inspect.Map.List())) do
-  --  print(string.format("%s %s,%s,%s", v.description, v.coordX, v.coordY, v.coordZ))
+  --  print(string.format(
+  --    "%s %s,%s,%s",
+  --    v.description,
+  --    v.coordX,
+  --    v.coordY,
+  --    v.coordZ))
   --end
 end
 
@@ -264,7 +278,7 @@ function AT.ScanCurrentMap()
     end
     MESSAGE_STACK = {}
 
-    -- Original, scans for and adds selected types of items found on minimap
+    -- Scans for and adds selected types of items found on minimap
     --for k,v in pairs(Inspect.Map.Detail(Inspect.Map.List())) do
     --  if ArtifactTracker_Settings.tracked[v.description] then
     --    AT.ShowMessage(v)
@@ -274,8 +288,8 @@ function AT.ScanCurrentMap()
     -- TODO: remove
     -- Modification, add custom item (artifact)
     local artifact = {}
-    artifact.id          = index                          -- original e.g.: "100000019,80000001DC0966E0"
-    artifact.description = area .. " Artifact " .. index  -- original e.g.: "Sunken boat"
+    artifact.id          = index
+    artifact.description = area .. " Artifact " .. index
     artifact.coordX      = ARTIFACTS[area][index][1]      -- east direction
     artifact.coordY      = 1000                           -- up direction
     artifact.coordZ      = ARTIFACTS[area][index][2]      -- south direction
@@ -288,16 +302,6 @@ end
 local alpha       = 0
 local rpt         = 0
 local last_update = 0
-
-function AT.CheckAbilities()
-  --for x=1,4 do
-  --  if ACTIVE_ABILITIES[x].counttrack > 0 and ACTIVE_ABILITIES[x].active and ACTIVE_ABILITIES[x].buff == false then
-  --    AT.UI.alert[x].b:SetVisible(true)
-  --  else
-  --    AT.UI.alert[x].b:SetVisible(false)
-  --  end
-  --end
-end
 
 function AT.Event_System_Update_Begin(h)
 
@@ -419,22 +423,30 @@ function AT.Event_System_Update_Begin(h)
               AT.UI.dir[x]:SetAlpha(1)
             end
             if AT.UI.icons[x].ci ~= MESSAGE_STACK[x].n then
-              -- Requires a valid description (or else addon crash)
-              --AT.UI.icons[x]:SetTexture("Rift", ICONS[MESSAGE_STACK[x].n])
-              AT.UI.icons[x].ci = MESSAGE_STACK[x].n
+              --AT.UI.icons[x]:SetTexture("Rift", ARTIFACT_ICON)  -- ugly
+              --AT.UI.icons[x].ci = MESSAGE_STACK[x].n
             end
 
-
-            if AT.UI.dir[x].ci ~= MESSAGE_STACK[x].ixn and CX_IMAGES[MESSAGE_STACK[x].ixn] then
-              AT.UI.dir[x]:SetTexture(addon.identifier, CX_IMAGES[MESSAGE_STACK[x].ixn])
+            if
+              AT.UI.dir[x].ci ~= MESSAGE_STACK[x].ixn and
+              CX_IMAGES[MESSAGE_STACK[x].ixn]
+            then
+              AT.UI.dir[x]:SetTexture(
+                addon.identifier,
+                CX_IMAGES[MESSAGE_STACK[x].ixn])
               AT.UI.dir[x].ci = MESSAGE_STACK[x].ixn
             end
 
             -- Show distance to artifact if longer than 10m
             if MESSAGE_STACK[x].d > 10 then
-              AT.UI.msgframes[x]:SetText(string.format("%s [%dm]", MESSAGE_STACK[x].n, MESSAGE_STACK[x].d))
+              AT.UI.msgframes[x]:SetText(string.format(
+                "%s [%dm]",
+                MESSAGE_STACK[x].n,
+                MESSAGE_STACK[x].d))
             else
-              AT.UI.msgframes[x]:SetText(string.format("%s", MESSAGE_STACK[x].n))
+              AT.UI.msgframes[x]:SetText(string.format(
+                "%s",
+                MESSAGE_STACK[x].n))
             end
             AT.UI.msgframes[x]:SetVisible(true)
 
@@ -462,10 +474,6 @@ function AT.Event_System_Update_Begin(h)
       prev_IUD = pd
     end
   end
-  --if TRACKLISTCHANGE then
-  --  AT.CheckAbilities()
-  --  TRACKLISTCHANGE = false
-  --end
 end
 
 function AT.CreateConfig(k, v)
@@ -475,15 +483,10 @@ function AT.CreateConfig(k, v)
   c:SetChecked(false)
   c:SetLayer(15)
   c:EventAttach(Event.UI.Checkbox.Change, function(self, h)
-    --local d = data.LOOKUP[v.name[LANG]]
     if c:GetChecked() then
       ArtifactTracker_Settings.tracked[v.name[LANG]] = true
-      --TRACKLISTCHANGE = true
-      --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack+1
     else
       ArtifactTracker_Settings.tracked[v.name[LANG]] = nil
-      --TRACKLISTCHANGE = true
-      --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack-1
     end
     AT.ScanCurrentMap()
   end, "Event.UI.Checkbox.Change")
@@ -665,35 +668,28 @@ function AT.BuildUI()
   -- List of areas
   for k,v in pairs(ARTIFACTS) do
     local c, i, t
-c = UI.CreateFrame("RiftCheckbox", "cb"..k, AT.UI.config)
-c:SetWidth(24)
-c:SetHeight(24)
-c:SetChecked(false)
-c:SetLayer(15)
-c:EventAttach(Event.UI.Checkbox.Change, function(self, h)
-  --local d = data.LOOKUP[v.name[LANG]]
-  if c:GetChecked() then
-    --ArtifactTracker_Settings.tracked[v.name[LANG]] = true
-    --TRACKLISTCHANGE = true
-    --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack+1
-  else
-    --ArtifactTracker_Settings.tracked[v.name[LANG]] = nil
-    --TRACKLISTCHANGE = true
-    --ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack = ACTIVE_ABILITIES[TRKINDEX[d.rk]].counttrack-1
-  end
-  AT.ScanCurrentMap()
-end, "Event.UI.Checkbox.Change")
-local i = UI.CreateFrame("Texture", "i"..k, AT.UI.config)
-i:SetWidth(24)
-i:SetHeight(24)
---i:SetTexture("Rift", v.icon)
-i:SetPoint("TOPLEFT", c, "TOPRIGHT", 2, 0)
-i:SetLayer(15)
-local t = UI.CreateFrame("Text", "t"..k, AT.UI.config)
-t:SetFontSize(12)
-t:SetText(k)
-t:SetPoint("CENTERLEFT", i, "CENTERRIGHT", 2, 0)
-t:SetLayer(15)
+
+    c = UI.CreateFrame("RiftCheckbox", "cb"..k, AT.UI.config)
+    c:SetWidth(24)
+    c:SetHeight(24)
+    c:SetChecked(false)
+    c:SetLayer(15)
+    c:EventAttach(Event.UI.Checkbox.Change, function(self, h)
+      AT.ScanCurrentMap()
+    end, "Event.UI.Checkbox.Change")
+
+    local i = UI.CreateFrame("Texture", "i"..k, AT.UI.config)
+    i:SetWidth(24)
+    i:SetHeight(24)
+    --i:SetTexture("Rift", ARTIFACT_ICON)  --v.icon)
+    i:SetPoint("TOPLEFT", c, "TOPRIGHT", 2, 0)
+    i:SetLayer(15)
+
+    local t = UI.CreateFrame("Text", "t"..k, AT.UI.config)
+    t:SetFontSize(12)
+    t:SetText(k)
+    t:SetPoint("CENTERLEFT", i, "CENTERRIGHT", 2, 0)
+    t:SetLayer(15)
 
     txt_w = math.max(txt_w, t:GetWidth())
 
@@ -715,18 +711,13 @@ t:SetLayer(15)
 
   -- Placement of material lists
   local colwidth = 52 + txt_w
-  --frm_metal:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, trt)
-  --frm_fish:SetPoint("TOPLEFT", frm_metal, "TOPLEFT", colwidth+2, 0)
   frm_areas:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, trt)
 
   -- Configuration window height
   AT.UI.config:SetHeight(800)
 
-  --local frmht = math.max(#ITEMS["MINING"], #ITEMS["FISH"])
-  --local frmht = #ARTIFACTS              -- zero, wtf?
-  --local frmht = table.getn(ARTIFACTS)   -- zero, wtf?
-  local frmht = 0
-  for k,v in pairs(ARTIFACTS) do          -- make it work ffs
+  local frmht = 0  -- number of items in the list
+  for k,v in pairs(ARTIFACTS) do
     frmht = frmht + 1
   end
 
@@ -735,10 +726,14 @@ t:SetLayer(15)
 
   AT.UI.cfgoptions = UI.CreateFrame("Frame", "AT.UI.cfgoptions", AT.UI.config)
   AT.UI.cfgoptions:SetWidth((colwidth*4) + 10)
-  --AT.UI.cfgoptions:SetHeight(60)
-  AT.UI.cfgoptions:SetHeight(60+40)  -- +40 to compensate for "Show relative direction arrows"
+  AT.UI.cfgoptions:SetHeight(60+40)  -- MOD +40
   AT.UI.cfgoptions:SetLayer(1)
-  AT.UI.cfgoptions:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, ((24 * frmht) + 8 + trt))
+  AT.UI.cfgoptions:SetPoint(
+    "TOPLEFT",
+    AT.UI.config,
+    "TOPLEFT",
+    trl,
+    ((24*frmht) + 8 + trt))
 
 
   --
@@ -753,14 +748,20 @@ t:SetLayer(15)
   AT.UI.l_nodes:SetText("Number of bananas to display: ")
 
   -- Slider
-  AT.UI.s_nodes = UI.CreateFrame("RiftSlider", "AT.UI.s_nodes", AT.UI.cfgoptions)
+  AT.UI.s_nodes = UI.CreateFrame(
+    "RiftSlider",
+    "AT.UI.s_nodes",
+    AT.UI.cfgoptions)
   AT.UI.s_nodes:SetLayer(2)
   AT.UI.s_nodes:SetWidth(math.floor(colwidth*1.5))
   AT.UI.s_nodes:SetRange(1, 10)
   AT.UI.s_nodes:SetPoint("TOPLEFT", AT.UI.l_nodes, "BOTTOMLEFT", 16, 0)
   AT.UI.s_nodes:EventAttach(Event.UI.Slider.Change, function(self, h)
     ArtifactTracker_Settings.num_nodes = AT.UI.s_nodes:GetPosition()
-    AT.UI.l_nodes:SetText(string.format("Number of artifacts to display: %d", ArtifactTracker_Settings.num_nodes))
+    AT.UI.l_nodes:SetText(
+      string.format(
+        "Number of artifacts to display: %d",
+        ArtifactTracker_Settings.num_nodes))
     AT.ScanCurrentMap()
   end, "Event.UI.Slider.Change")
 
@@ -770,7 +771,10 @@ t:SetLayer(15)
   --
 
   -- Check box
-  AT.UI.c_combat = UI.CreateFrame("RiftCheckbox", "AT.UI.c_combat", AT.UI.cfgoptions)
+  AT.UI.c_combat = UI.CreateFrame(
+    "RiftCheckbox",
+    "AT.UI.c_combat",
+    AT.UI.cfgoptions)
   AT.UI.c_combat:SetWidth(24)
   AT.UI.c_combat:SetHeight(24)
   AT.UI.c_combat:SetLayer(5)
@@ -796,18 +800,23 @@ t:SetLayer(15)
   --
 
   -- Check box
-  AT.UI.c_relative = UI.CreateFrame("RiftCheckbox", "AT.UI.c_relative", AT.UI.cfgoptions)
+  AT.UI.c_relative = UI.CreateFrame(
+    "RiftCheckbox",
+    "AT.UI.c_relative",
+    AT.UI.cfgoptions)
   AT.UI.c_relative:SetWidth(24)
   AT.UI.c_relative:SetHeight(24)
   AT.UI.c_relative:SetLayer(5)
-  --AT.UI.c_relative:SetPoint("TOPLEFT", AT.UI.l_duration, "BOTTOMLEFT", 0, 14)
   AT.UI.c_relative:SetPoint("TOPLEFT", AT.UI.c_combat, "BOTTOMLEFT", 0, 14)
   AT.UI.c_relative:EventAttach(Event.UI.Checkbox.Change, function(self, h)
     ArtifactTracker_Settings.relative = AT.UI.c_relative:GetChecked()
   end, "Event.UI.Checkbox.Change")
 
   -- Text
-  AT.UI.l_relative = UI.CreateFrame("Text", "AT.UI.l_relative", AT.UI.cfgoptions)
+  AT.UI.l_relative = UI.CreateFrame(
+    "Text",
+    "AT.UI.l_relative",
+    AT.UI.cfgoptions)
   AT.UI.l_relative:SetFontSize(14)
   AT.UI.l_relative:SetLayer(15)
   AT.UI.l_relative:SetText("Show relative direction arrows")
@@ -825,29 +834,36 @@ t:SetLayer(15)
   AT.UI.configscale:SetLayer(1)
   AT.UI.configscale:SetBackgroundColor(rgba[1], rgba[2], rgba[3], rgba[4])
   AT.UI.configscale:SetPoint("TOPLEFT", AT.UI.cfgoptions, "BOTTOMLEFT", 0, 8)
+  AT.UI.config:SetHeight((24 * frmht) + 124 +40 + trt + trb)  -- MOD +40
 
-  --AT.UI.config:SetHeight((24 * frmht) + 124 + trt + trb)
-  AT.UI.config:SetHeight((24 * frmht) + 124 + 40 + trt + trb)  -- +40 compensate for one additional check box
-  
-  AT.UI.configscale_ctr = UI.CreateFrame("Frame", "AT.UI.configscale_ctr", AT.UI.config)
+  AT.UI.configscale_ctr = UI.CreateFrame(
+    "Frame",
+    "AT.UI.configscale_ctr",
+    AT.UI.config)
   AT.UI.configscale_ctr:SetPoint("CENTER", AT.UI.configscale, "CENTER", 0, 0)
   AT.UI.configscale_ctr:SetLayer(2)
 
   -- Mouse wheel scroll up
-  AT.UI.configscale:EventAttach(Event.UI.Input.Mouse.Wheel.Forward, function(self, h)
-    if ArtifactTracker_Settings.fontsize <= 128 then
-      ArtifactTracker_Settings.fontsize = ArtifactTracker_Settings.fontsize+1
-      AT.ResizeElements()
-    end
-  end, "Event.UI.Input.Mouse.Wheel.Forward")
+  AT.UI.configscale:EventAttach(
+    Event.UI.Input.Mouse.Wheel.Forward,
+    function(self, h)
+      if ArtifactTracker_Settings.fontsize <= 128 then
+        ArtifactTracker_Settings.fontsize = ArtifactTracker_Settings.fontsize+1
+        AT.ResizeElements()
+      end
+    end,
+    "Event.UI.Input.Mouse.Wheel.Forward")
 
   -- Mouse wheel scrool down
-  AT.UI.configscale:EventAttach(Event.UI.Input.Mouse.Wheel.Back, function(self, h)
-    if ArtifactTracker_Settings.fontsize >= 12 then
-      ArtifactTracker_Settings.fontsize = ArtifactTracker_Settings.fontsize-1
-      AT.ResizeElements()
-    end
-  end, "Event.UI.Input.Mouse.Wheel.Back")
+  AT.UI.configscale:EventAttach(
+    Event.UI.Input.Mouse.Wheel.Back,
+    function(self, h)
+      if ArtifactTracker_Settings.fontsize >= 12 then
+        ArtifactTracker_Settings.fontsize = ArtifactTracker_Settings.fontsize-1
+        AT.ResizeElements()
+      end
+    end,
+    "Event.UI.Input.Mouse.Wheel.Back")
 
   -- Direction arrow
   --AT.UI.cs_d = UI.CreateFrame("Texture", "AT.UI.cs_d", AT.UI.config)
@@ -885,7 +901,12 @@ t:SetLayer(15)
     AT.UI.dir[x].ci = ""
 
     if x > 1 then
-      AT.UI.msgframes[x]:SetPoint("TOPLEFT", AT.UI.msgframes[x-1], "BOTTOMLEFT", 0, 0)
+      AT.UI.msgframes[x]:SetPoint(
+        "TOPLEFT",
+        AT.UI.msgframes[x-1],
+        "BOTTOMLEFT",
+        0,
+        0)
     end
   end
 
@@ -950,53 +971,22 @@ end
 
 function AT.Event_Addon_SavedVariables_Load_End(h, a)
   if a == addon.identifier then
-    if ArtifactTracker_Settings == nil then ArtifactTracker_Settings = {} end
-    if ArtifactTracker_Nodes == nil then ArtifactTracker_Nodes = {} end
-
-    if ArtifactTracker_Nodes.version == nil or ArtifactTracker_Nodes.version < default_settings.version then
-      if ArtifactTracker_Nodes.version == nil then
-        local cx
-        local cidx
-        local newRTS = {}
-        local lud
-        local errors = {}
-        for tk, tv in pairs(ArtifactTracker_Nodes) do
-          newRTS[tk] = {}
-          for zk, zv in pairs(tv) do
-            newRTS[tk][zk] = {}
-            for ik, iv in pairs(zv) do
-              cx = {0,0,0}
-              cidx = 0
-              for tkn in string.gmatch(ik, "[0-9]+") do cidx=cidx+1 cx[cidx]=tkn end
-              newRTS[tk][zk][ik] = { x=cx[1], z=cx[2], y=cx[3], nodes = {} }
-              for rk, rv in pairs(iv) do
-                --lud = data.LOOKUP[rk]
-                --if lud then
-                --  newRTS[tk][zk][ik].nodes[lud.k] = true
-                --else
-                --  if errors[rk] == nil then
-                --    errors[rk] = true
-                --  end
-                --end
-              end
-            end
-          end
-        end
-
-        ArtifactTracker_Nodes = {}
-        MergeTable(ArtifactTracker_Nodes, newRTS)
-      end
-      ArtifactTracker_Nodes.version = addon.toc.Version
+    if ArtifactTracker_Settings == nil then
+      ArtifactTracker_Settings = {}
     end
 
     MergeTable(ArtifactTracker_Settings, default_settings)
-    MergeTable(ArtifactTracker_Nodes, default_settings_node)
 
     if MINIMAPDOCKER then
       MINIMAPDOCKER.Register(addon.identifier, AT.UI.mm)
       AT.UI.mm:SetTexture(addon.identifier, "img/mm_button.png")
     else
-      AT.UI.mm:SetPoint("TOPLEFT", UIParent, "TOPLEFT", ArtifactTracker_Settings.mmx, ArtifactTracker_Settings.mmy)
+      AT.UI.mm:SetPoint(
+        "TOPLEFT",
+        UIParent,
+        "TOPLEFT",
+        ArtifactTracker_Settings.mmx,
+        ArtifactTracker_Settings.mmy)
       if ArtifactTracker_Settings.locked then
         AT.UI.mm:SetTexture(addon.identifier, "img/mm_button.png")
       else
@@ -1011,7 +1001,12 @@ function AT.Event_Addon_SavedVariables_Load_End(h, a)
       ArtifactTracker_Settings.trx = AT.UI.msgframes[1]:GetLeft()
       ArtifactTracker_Settings.try = AT.UI.msgframes[1]:GetTop()
     else
-      AT.UI.msgframes[1]:SetPoint("TOPLEFT", UIParent, "TOPLEFT", ArtifactTracker_Settings.trx, ArtifactTracker_Settings.try)
+      AT.UI.msgframes[1]:SetPoint(
+        "TOPLEFT",
+        UIParent,
+        "TOPLEFT",
+        ArtifactTracker_Settings.trx,
+        ArtifactTracker_Settings.try)
     end
 
     for k, v in pairs(ArtifactTracker_Settings.tracked) do
@@ -1019,7 +1014,14 @@ function AT.Event_Addon_SavedVariables_Load_End(h, a)
         AT.UI.configchk[k].c:SetChecked(true)
       end
     end
-    AT.UI.config:SetPoint("TOPLEFT", UIParent, "TOPLEFT", ArtifactTracker_Settings.cfgx, ArtifactTracker_Settings.cfgy)
+
+    AT.UI.config:SetPoint(
+      "TOPLEFT",
+      UIParent,
+      "TOPLEFT",
+      ArtifactTracker_Settings.cfgx,
+      ArtifactTracker_Settings.cfgy)
+
     local nn = ArtifactTracker_Settings.num_nodes
     AT.UI.s_nodes:SetPosition(2)
     AT.UI.s_nodes:SetPosition(nn)
@@ -1029,9 +1031,15 @@ function AT.Event_Addon_SavedVariables_Load_End(h, a)
     AT.UI.c_combat:SetChecked(ArtifactTracker_Settings.showcombat)
     AT.UI.c_relative:SetChecked(ArtifactTracker_Settings.relative)
     SVLOADED = true
+
     AT.ScanCurrentMap()
+
     Command.Event.Attach(Event.Map.Add, AT.Event_Map_Add, "Event.Map.Add")
-    Command.Event.Attach(Event.Map.Remove, AT.Event_Map_Remove, "Event.Map.Remove")
+
+    Command.Event.Attach(
+      Event.Map.Remove,
+      AT.Event_Map_Remove,
+      "Event.Map.Remove")
     
     LibVersionCheck.register(addon.toc.Identifier, addon.toc.Version)
   end
@@ -1049,7 +1057,12 @@ function AT.ResizeElements()
     AT.UI.dir[x]:SetHeight(AT.UI.fht)
   end
 
-  AT.UI.anchor:SetPoint("BOTTOMLEFT", AT.UI.msgframes[1], "TOPLEFT", -(AT.UI.fht*2), 0)
+  AT.UI.anchor:SetPoint(
+    "BOTTOMLEFT",
+    AT.UI.msgframes[1],
+    "TOPLEFT",
+    -(AT.UI.fht*2),
+    0)
   AT.UI.anchor:SetWidth(AT.UI.fht * 8)
 
   -- Direction
@@ -1086,11 +1099,15 @@ end
 --
 function AT.Command_Slash_Register(h, args)
   local r = {}
+
   for token in string.gmatch(args, "[^%s]+") do
     table.insert(r, token)
   end
+
   if r[1] == nil then
-    print("Welcome to Artifact Tracker, an addon that will help you complete the game 100% or make you rich. Try /at help for further instructions.");
+    print("Welcome to Artifact Tracker, an addon that will help you complete"..
+    " the game 100% or make you rich. Try /at help for further instructions.");
+
   elseif r[1] == "help" then
     print("Valid commands are:")
     print("/at dump artifact\tCurrent artifact information.")
@@ -1105,6 +1122,7 @@ function AT.Command_Slash_Register(h, args)
     print("/at clear          \tClear all tracking entries.")
     print("/at reset         \tReset addon to default settings.")
     print("")
+
   elseif r[1] == "area" then
     if ARTIFACTS[r[2]] == nil then
       print("Error: Invalid area selected. Try \"/at dump database\"")
@@ -1112,6 +1130,7 @@ function AT.Command_Slash_Register(h, args)
       area = r[2]
       print("Area sucessfully set to:", area)
     end
+
   elseif r[1] == "dump" then
     if r[2] == nil then
       print("Error: No second argument provided. Try \"/at help\".")
@@ -1134,7 +1153,9 @@ function AT.Command_Slash_Register(h, args)
       print("Player:")
       print(Utility.Serialize.Full(pd))
     end
+
   elseif r[1] == "scan" then
+    -- TODO: reimplement and simplify
     local pd          = Inspect.Unit.Detail("player")
     local closest     = 999999
     local close       = 999999
@@ -1144,7 +1165,9 @@ function AT.Command_Slash_Register(h, args)
     local close_index = 0
     for k,v in pairs(ARTIFACTS[area]) do
       cur_index = cur_index + 1
-      distance  = AT.Distance({v[1], pd.coordY, v[2]}, {pd.coordX, pd.coordY, pd.coordZ})
+      distance  = AT.Distance(
+        {v[1], pd.coordY, v[2]},
+        {pd.coordX, pd.coordY, pd.coordZ})
       print("k,v,d:", k, Utility.Serialize.Inline(v), distance)
       if distance == nil then
         print("Error: could not calculate distance.")
@@ -1176,6 +1199,7 @@ function AT.Command_Slash_Register(h, args)
       --AT.ScanCurrentMap()
       print("Scanning done. Closest artifact: ", best_index)
     end
+
   elseif r[1] == "set" then
     if r[2] == nil then
       print("Error: No second argument provided. Try /at help.")
@@ -1187,20 +1211,22 @@ function AT.Command_Slash_Register(h, args)
       print("Artifact index sucessfully set to:", index)
       AT.ScanCurrentMap()
     end
+
   elseif r[1] == "add" then
     local index = tonumber(r[2])
     if index == nil then
       print("Error: Invalid argument to \"add\".")
     else
       local artifact = {}
-      artifact.id          = index                          -- original e.g.: "100000019,80000001DC0966E0"
-      artifact.description = area .. " Artifact " .. index  -- original e.g.: "Sunken boat"
+      artifact.id          = index
+      artifact.description = area .. " Artifact " .. index
       artifact.coordX      = ARTIFACTS[area][index][1]      -- east direction
       artifact.coordY      = 1000                           -- up direction
       artifact.coordZ      = ARTIFACTS[area][index][2]      -- south direction
       print(string.format("Added %q", artifact.description))
       AT.Add(artifact)
     end
+
   elseif r[1] == "remove" then
     local index = tonumber(r[2])
     if index == nil then
@@ -1208,27 +1234,49 @@ function AT.Command_Slash_Register(h, args)
     else
       AT.Remove(i)
     end
+
   elseif r[1] == "clear" then
     AT.Clear()
+
   elseif r[1] == "reset" then
     if MINIMAPDOCKER then
       print("Not resetting button position. Location manged by Docker.")
     else
       ArtifactTracker_Settings.mmx = 100
       ArtifactTracker_Settings.mmy = 100
+
       print("Resetting location of control button to 100,100")
-      AT.UI.mm:SetPoint("TOPLEFT", UIParent, "TOPLEFT", ArtifactTracker_Settings.mmx, ArtifactTracker_Settings.mmy)
+      AT.UI.mm:SetPoint(
+        "TOPLEFT",
+        UIParent,
+        "TOPLEFT",
+        ArtifactTracker_Settings.mmx,
+        ArtifactTracker_Settings.mmy)
     end
+
     print("Resetting location of tracker listing to 200,100")
     ArtifactTracker_Settings.trx = 200
     ArtifactTracker_Settings.try = 100
-    AT.UI.msgframes[1]:SetPoint("TOPLEFT", UIParent, "TOPLEFT", ArtifactTracker_Settings.trx, ArtifactTracker_Settings.try)
+    AT.UI.msgframes[1]:SetPoint(
+      "TOPLEFT",
+      UIParent,
+      "TOPLEFT",
+      ArtifactTracker_Settings.trx,
+      ArtifactTracker_Settings.try)
+
     print("Resetting location of config screen to 300,300")
     ArtifactTracker_Settings.cfgx = 300
     ArtifactTracker_Settings.cfgy = 300
-    AT.UI.config:SetPoint("TOPLEFT", UIParent, "TOPLEFT", ArtifactTracker_Settings.cfgx, ArtifactTracker_Settings.cfgy)
+    AT.UI.config:SetPoint(
+      "TOPLEFT",
+      UIParent,
+      "TOPLEFT",
+      ArtifactTracker_Settings.cfgx,
+      ArtifactTracker_Settings.cfgy)
+
   else
     print("Unrecognized command.")
+
   end
 end
 
@@ -1239,11 +1287,34 @@ end
 
 AT.BuildUI()
 
-Command.Event.Attach(Event.System.Update.Begin, AT.Event_System_Update_Begin, "Event.System.Update.Begin")
-Command.Event.Attach(Event.Addon.SavedVariables.Load.End, AT.Event_Addon_SavedVariables_Load_End, "Event.Addon.SavedVariables.Load.End")
-Command.Event.Attach(Event.System.Secure.Leave, AT.Event_System_Secure_Leave, "Event.System.Secure.Leave")
-Command.Event.Attach(Event.System.Secure.Enter, AT.Event_System_Secure_Enter, "Event.System.Secure.Enter")
-Command.Event.Attach(Command.Slash.Register("artifacttracker"), AT.Command_Slash_Register, "Command.Slash.Register")
-Command.Event.Attach(Command.Slash.Register("at"), AT.Command_Slash_Register, "Command.Slash.Register")
+Command.Event.Attach(
+  Event.System.Update.Begin,
+  AT.Event_System_Update_Begin,
+  "Event.System.Update.Begin")
+
+Command.Event.Attach(
+  Event.Addon.SavedVariables.Load.End,
+  AT.Event_Addon_SavedVariables_Load_End,
+  "Event.Addon.SavedVariables.Load.End")
+
+Command.Event.Attach(
+  Event.System.Secure.Leave,
+  AT.Event_System_Secure_Leave,
+  "Event.System.Secure.Leave")
+
+Command.Event.Attach(
+  Event.System.Secure.Enter,
+  AT.Event_System_Secure_Enter,
+  "Event.System.Secure.Enter")
+
+Command.Event.Attach(
+  Command.Slash.Register("artifacttracker"),
+  AT.Command_Slash_Register,
+  "Command.Slash.Register")
+
+Command.Event.Attach(
+  Command.Slash.Register("at"),
+  AT.Command_Slash_Register,
+  "Command.Slash.Register")
 
 print(string.format("v%s loaded.", addon.toc.Version))
