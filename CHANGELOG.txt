@@ -1,0 +1,29 @@
+1.0 - Initial release. Based on latest resource tracker (2013-07-15).
+
+Below is the original Resource Tracker description. May not be accurate.
+
+If you have Docker installed, it will place an icon in the Dock. If you do not
+have Docker, it will place an icon somewhere in the topleft of the screen.
+
+The icon is a silver diamond on a minimap style button. The button will
+initially be gray, and can be moved around by dragging.
+
+Once it is in place, RIGHT CLICK the button, and it will gain some color. At
+this point, the configuration screen can be accessed by LEFT CLICKing the
+button.
+
+This will display the RT Config screen, which lists all Mining/Foraging node
+types. Use the checkboxes to select which you are interested in seeing
+notifications for. At the bottom of the config screen, is a dark red box,
+showing an arrow, a resource and some text. Using the mousewheel on this red
+section will change the size of the font used.
+
+When the configuration screen is visible, there will also be another blue bar
+shown, labelled 'Resource Tracker'. This is the anchor for where the alerts will
+appear. This can be moved around by dragging the blue bar.
+
+NOTE: The arrow indicator is the COMPASS DIRECTION of the node - not a
+      direction relative to your heading.
+
+The arrow will be green or red (red indicates that the node is significantly
+above or below you)

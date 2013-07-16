@@ -1,0 +1,31 @@
+Identifier  = "ArtifactTracker"
+
+Name        = "ArtifactTracker"
+Description = "Shows direction and distance to artifacts."
+
+Author      = "Rubaka"
+Email       = "somebody@example.com"
+Version     = "1.0"
+Environment = "2.2"
+
+RunOnStartup = {
+  "Artifacts.lua",
+  "ArtifactTracker_Data.lua",
+  "ArtifactTracker.lua",
+}
+
+Embed = {
+  ["lib/libZoneChange"]   = true,
+  ["lib/LibVersionCheck"] = true, 
+}
+
+SavedVariables = {
+  ArtifactTracker_Settings = 'character',
+  ArtifactTracker_Nodes    = 'account',
+}
+
+Dependencies = {
+  Docker          = {"optional", "before"},
+  libZoneChange   = {"required", "before"},
+  LibVersionCheck = {"required", "before"},
+}

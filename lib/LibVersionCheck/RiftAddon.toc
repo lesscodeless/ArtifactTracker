@@ -1,0 +1,25 @@
+Identifier = "LibVersionCheck"
+
+Name = {
+  English = "LibVersionCheck"
+}
+
+Description = {
+  English  = "A Library to exchange Addon Version info with other players, to remind when a new addon version is available",
+}
+
+Email = "blohm@s.netic.de"
+Version = "0.03"
+Environment = "2.2"
+SavedVariables = {
+   LibVersionCheckVersions = "global",
+   LibVersionCheckSpy      = "global",
+   LibVersionCheckSettings = "account",
+}
+
+
+RunOnStartup = {
+  "Translations.lua",
+  "main.lua",
+  "UI.lua",
+}
