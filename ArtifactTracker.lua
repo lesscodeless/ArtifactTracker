@@ -1,13 +1,26 @@
 --
+-- ArtifactTracker 1.0 by Cleraria
+--
 -- TODO:
---  * auto-update artifact list
+--  * map player location to area name. OR rebuild the area based artifact table
+--    to a global grid table
 --  * whilelist / blacklist
 --  * automatic detection of picked up artifacts
+--    * possible to save new locations
+--    * possible to blacklist picked up artifacts
 --  * detect and group duplicates
 --
+
 local addon, data = ...
 
--- Some arbitrary ArtifactTracker settings
+
+
+--------------------------------------------------------------------------------
+--
+-- Settings
+--
+--------------------------------------------------------------------------------
+
 local area          = "Stonefield"        -- default area
 local index         = 71                  -- default artifact in area
 local ARTIFACTS     = data.artifacts
@@ -43,16 +56,103 @@ local default_settings_node = {
   version = addon.toc.version
 }
 
-local SVLOADED = false
-local ITEMS    = data.ITEMS
-local LANG     = data.SYSLANG
+local SVLOADED      = false  -- addon saved variables loaded
+local AT_ACTIVE     = true   -- HUD active
+local prev_pd_a     = nil    -- cached copy of "player" (arrow updates)
+local prev_pd_s     = nil    -- cached copy of "player" (scan updates)
+local MESSAGE_STACK = {}     -- HUD message stack
 
-local ICONS     = {}
-local AT_ACTIVE = true
-local prev_IUD  = false
 
-local MESSAGE_STACK = {
-}
+
+--------------------------------------------------------------------------------
+--
+-- Helper functions
+--
+--------------------------------------------------------------------------------
+
+local math_sqrt = math.sqrt
+local math_atan = math.atan2
+local math_abs  = math.abs
+local math_pi   = math.pi
+
+-- Calculates the distance between two XYZ objects.
+-- Returns "nil" on invalid input.
+function AT.Distance(object1, object2)
+  -- Validate input
+  if
+    not object1 or
+    not object1.coordX or
+    not object1.coordY or
+    not object1.coordZ or
+    not object2 or
+    not object2.coordX or
+    not object2.coordY or
+    not object2.coordZ
+  then
+    return nil
+  end
+
+  -- Note to self: XYZ maps to East, Up, South in the game
+  local dx = object2.coordX - object1.coordX
+  local dy = object2.coordY - object1.coordY
+  local dz = object2.coordZ - object1.coordZ
+  return math_sqrt((dx^2)+(dy^2)+(dz^2))  -- distance
+end
+
+-- Scans the area for the closest artifact and returns it as a message.
+-- Returns "nil" on failure.
+function AT.Closest(minimum_distance)
+    local player           = Inspect.Unit.Detail("player")
+    local closest_distance = 999999
+    local current_distance = nil
+    local current_index    = 0
+    local closest_index    = 0
+
+    -- Return nil on invalid input data
+    if player.coordX == nil or player.coordY == nil or player.coordZ == nil then
+      print("Warning: Player position data missing.")
+      return nil
+    end
+
+    -- For all data points in selected area
+    for k,v in pairs(ARTIFACTS[area]) do
+      current_index = current_index + 1
+      -- Calculate distance between artifact and player
+      current_distance = AT.Distance(
+        {
+          ["coordX"] = v[1],
+          ["coordY"] = player.coordY,
+          ["coordZ"] = v[2]
+        },
+        player)
+      if
+        current_distance > minimum_distance and
+        current_distance < closest_distance
+      then
+        closest_distance = current_distance
+        closest_index = current_index
+      end
+    end
+
+    -- Return nil on failure
+    if closest_index == 0 then
+      print("Warning: Could not find any artifact.")
+      return nil
+    end
+
+    -- TODO: remove the need for setting "index" (used in ScanCurrentMap)
+    index = closest_index
+
+    -- Return message on success
+    local artifact = {}
+    artifact.id          = closest_index
+    artifact.description = area .. " Artifact " .. closest_index
+    artifact.coordX      = ARTIFACTS[area][closest_index][1]  -- east direction
+    artifact.coordY      = player.coordY                      -- up direction
+    artifact.coordZ      = ARTIFACTS[area][closest_index][2]  -- south direction
+    return artifact
+end
+
 
 local function MergeTable(o, n)
   for k,v in pairs(n) do
@@ -73,6 +173,12 @@ end
 
 function AT.ShowMessage(m)
 
+  -- Do nothing with invalid messages
+  if m == nil then
+    print("Warning: Attempting to show invalid message.")
+    return
+  end
+
   -- If message already exists, update time, then exit
   local tx = Inspect.Time.Real()
   local rq = true
@@ -84,13 +190,22 @@ function AT.ShowMessage(m)
     end
   end
 
+  -- Calculate distance
+  local player = Inspect.Unit.Detail("player")
+  local distance = 10
+  if
+    player == nil or
+    player.coordX == nil or
+    player.coordY == nil or
+    player.coordZ == nil
+  then
+    print("Warning: Player data not available. Setting a default distance.")
+  else
+    distance = AT.Distance(m, player)
+  end
+
   -- If message does not exist, add it on top (wtf?)
   if rq then
-
-    -- TODO: remove
-    print("Adding \"m\" to MESSAGE_STACK")
-    print(Utility.Serialize.Full(m))
-
     table.insert(MESSAGE_STACK, 1, {
       i = m.id,
       t = nil,
@@ -98,7 +213,7 @@ function AT.ShowMessage(m)
       y = m.coordY,
       z = m.coordZ,
       n = m.description,
-      d = 10})  -- original: 1000 (meters)
+      d = distance})
   end
 
   -- Trim list if it gets too big
@@ -106,22 +221,11 @@ function AT.ShowMessage(m)
     table.remove(MESSAGE_STACK, 11)
   end
 
-  -- TODO: remove
-  print("MESSAGE_STACK:")
-  print(Utility.Serialize.Full(MESSAGE_STACK))
-
 end
 
 function AT.Add(m)
   print("AT.Add")
-  table.insert(MESSAGE_STACK, 1, {
-    i = m.id,
-    t = nil,
-    x = m.coordX,
-    y = m.coordY,
-    z = m.coordZ,
-    n = m.description,
-    d = 10})  -- original: 1000 (meters)
+  AT.ShowMessage(m)
 end
 
 function AT.Remove(i)
@@ -130,48 +234,8 @@ function AT.Remove(i)
 end
 
 function AT.Clear()
-  print("AT.Clear")
+  --print("AT.Clear")
   MESSAGE_STACK = {}
-end
-
-function AT.Event_Map_Remove(h, e)
-  for ed,ev in pairs(e) do
-    for k,v in pairs(MESSAGE_STACK) do
-      if v.i == ed then
-        if v.d <= 70 then
-          MESSAGE_STACK[k].t = Inspect.Time.Real() - 100
-        else
-          MESSAGE_STACK[k].t = Inspect.Time.Real() +
-            ArtifactTracker_Settings.fade_time
-        end
-        break
-      end
-    end
-  end
-end
-
-function AT.Event_Map_Add(h, e)
-  --for k,v in pairs(Inspect.Map.Detail(e)) do
-  --  if ArtifactTracker_Settings.tracked[v.description] and AT_ACTIVE then
-  --    AT.ShowMessage(v)
-  --  end
-  --  local res = AT.ALLITEMS[v.description]
-  --  if res then
-  --    local ix = string.format("%d.%d.%d", v.coordX, v.coordZ, v.coordY)
-  --    if ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID] == nil then
-  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID] = {}
-  --    end
-  --    if
-  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] == nil
-  --    then
-  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] =
-  --        {x=v.coordX, z=v.coordZ, y=v.coordY, nodes = {} }
-  --    end
-  --    local lud = data.LOOKUP[v.description]
-  --    ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix].nodes[lud.k]
-  --      = true
-  --  end
-  --end
 end
 
 function AT.DumpCurrentMap()
@@ -186,19 +250,6 @@ function AT.DumpCurrentMap()
   --    v.coordY,
   --    v.coordZ))
   --end
-end
-
-local math_sqrt = math.sqrt
-local math_atan = math.atan2
-local math_abs  = math.abs
-local math_pi   = math.pi
-
--- XYZ maps to East,Up,South in the game
-function AT.Distance(EUS1, EUS2)
-  local dx = EUS2[1]-EUS1[1]
-  local dy = EUS2[2]-EUS1[2]
-  local dz = EUS2[3]-EUS1[3]
-  return math_sqrt((dx^2)+(dy^2)+(dz^2))  -- distance
 end
 
 function AT.direction(dt)
@@ -263,9 +314,6 @@ local CX_IMAGES = {
   ["eWSW"] = string.format("img/Ecompass-WSW.png")
 }
 
-
-local resort_req = false
-
 -- Scans the minimap
 function AT.ScanCurrentMap()
 
@@ -299,48 +347,115 @@ function AT.ScanCurrentMap()
   end
 end
 
-local alpha       = 0
-local rpt         = 0
-local last_update = 0
+--
+-- Event triggered functions
+--
+
+function AT.Event_Map_Remove(h, e)
+  for ed,ev in pairs(e) do
+    for k,v in pairs(MESSAGE_STACK) do
+      if v.i == ed then
+        if v.d <= 70 then
+          MESSAGE_STACK[k].t = Inspect.Time.Real() - 100
+        else
+          MESSAGE_STACK[k].t = Inspect.Time.Real() +
+            ArtifactTracker_Settings.fade_time
+        end
+        break
+      end
+    end
+  end
+end
+
+function AT.Event_Map_Add(h, e)
+  --for k,v in pairs(Inspect.Map.Detail(e)) do
+  --  if ArtifactTracker_Settings.tracked[v.description] and AT_ACTIVE then
+  --    AT.ShowMessage(v)
+  --  end
+  --  local res = AT.ALLITEMS[v.description]
+  --  if res then
+  --    local ix = string.format("%d.%d.%d", v.coordX, v.coordZ, v.coordY)
+  --    if ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID] == nil then
+  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID] = {}
+  --    end
+  --    if
+  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] == nil
+  --    then
+  --      ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix] =
+  --        {x=v.coordX, z=v.coordZ, y=v.coordY, nodes = {} }
+  --    end
+  --    local lud = data.LOOKUP[v.description]
+  --    ArtifactTracker_Nodes[res][LIBZONECHANGE.currentZoneID][ix].nodes[lud.k]
+  --      = true
+  --  end
+  --end
+end
+
+
+local resort_req            = false
+local alpha                 = 0
+local rpt                   = 0
+local last_direction_update = 0
+local last_closest_update   = 0
 
 function AT.Event_System_Update_Begin(h)
+  -- Time of entering this function
+  local timenow = Inspect.Time.Real()
 
   -- When there are artifacts
   if #MESSAGE_STACK > 0 then
-    local timenow = Inspect.Time.Real()
+
+    -- Location and other information about the player
+    local pd = Inspect.Unit.Detail("player")
 
     -- Every 100ms
-    if timenow - last_update > 0.1 then
-      last_update = timenow
+    if timenow - last_direction_update > 0.1 then
+      last_direction_update = timenow
 
-      -- Location and other information about the player
-      local pd = Inspect.Unit.Detail("player")
+      -- Attempt to update closest artifact
+      if
+        pd and 
+        pd.coordX and 
+        pd.coordY and 
+        pd.coordZ
+      then
+        -- First time (uninitialized)
+        if not prev_pd_s then
+          prev_pd_s = pd
+        end
+        -- But only if player has moved at least 5 meters since last update
+        if AT.Distance(pd, prev_pd_s) > 5 then
+          prev_pd_s = pd
+          AT.Clear()
+          AT.ShowMessage(AT.Closest(0))
+        end
+      end
 
       -- When relative direction setting is set to true
       if ArtifactTracker_Settings.relative then
 
         -- Update distance and direction to artifact
         if
-          prev_IUD and
-          prev_IUD.coordX and
-          prev_IUD.coordY and
-          prev_IUD.coordZ and
+          prev_pd_a and
+          prev_pd_a.coordX and
+          prev_pd_a.coordY and
+          prev_pd_a.coordZ and
           pd and
           pd.coordX and
           pd.coordY and
           pd.coordZ
         then
-          local p_dx      = prev_IUD.coordX - pd.coordX
-          local p_dy      = prev_IUD.coordY - pd.coordY
-          local p_dz      = prev_IUD.coordZ - pd.coordZ
+          local p_dx      = prev_pd_a.coordX - pd.coordX
+          local p_dy      = prev_pd_a.coordY - pd.coordY
+          local p_dz      = prev_pd_a.coordZ - pd.coordZ
           local p_heading = math_atan(p_dx, p_dz)*180/math_pi
 
           -- For each artifact in list
           for x, v in pairs(MESSAGE_STACK) do
             if
-              prev_IUD.coordX ~= pd.coordX or
-              prev_IUD.coordY ~= pd.coordY or
-              prev_IUD.coordZ ~= pd.coordZ
+              prev_pd_a.coordX ~= pd.coordX or
+              prev_pd_a.coordY ~= pd.coordY or
+              prev_pd_a.coordZ ~= pd.coordZ
             then
               -- Since height value is missing from the artifact data set we
               -- use the height value of the player instead.
@@ -471,43 +586,52 @@ function AT.Event_System_Update_Begin(h)
         end
         resort_req = false
       end
-      prev_IUD = pd
+      prev_pd_a = pd
     end
   end
 end
 
-function AT.CreateConfig(k, v)
-  local c = UI.CreateFrame("RiftCheckbox", "cb"..k, AT.UI.config)
-  c:SetWidth(24)
-  c:SetHeight(24)
-  c:SetChecked(false)
-  c:SetLayer(15)
-  c:EventAttach(Event.UI.Checkbox.Change, function(self, h)
-    if c:GetChecked() then
-      ArtifactTracker_Settings.tracked[v.name[LANG]] = true
-    else
-      ArtifactTracker_Settings.tracked[v.name[LANG]] = nil
-    end
-    AT.ScanCurrentMap()
-  end, "Event.UI.Checkbox.Change")
-  local i = UI.CreateFrame("Texture", "i"..k, AT.UI.config)
-  i:SetWidth(24)
-  i:SetHeight(24)
-  i:SetTexture("Rift", v.icon)
-  i:SetPoint("TOPLEFT", c, "TOPRIGHT", 2, 0)
-  i:SetLayer(15)
-  local t = UI.CreateFrame("Text", "t"..k, AT.UI.config)
-  t:SetFontSize(12)
-  t:SetText(v.name[LANG])
-  t:SetPoint("CENTERLEFT", i, "CENTERRIGHT", 2, 0)
-  t:SetLayer(15)
-  return c, i, t
-end
+
+
+--------------------------------------------------------------------------------
+--
+-- Messy GUI code
+--
+--------------------------------------------------------------------------------
+
+--function AT.CreateConfig(k, v)
+--  local c = UI.CreateFrame("RiftCheckbox", "cb"..k, AT.UI.config)
+--  c:SetWidth(24)
+--  c:SetHeight(24)
+--  c:SetChecked(false)
+--  c:SetLayer(15)
+--  c:EventAttach(Event.UI.Checkbox.Change, function(self, h)
+--    if c:GetChecked() then
+--      ArtifactTracker_Settings.tracked[v.name[LANG]] = true
+--    else
+--      ArtifactTracker_Settings.tracked[v.name[LANG]] = nil
+--    end
+--    AT.ScanCurrentMap()
+--  end, "Event.UI.Checkbox.Change")
+--  local i = UI.CreateFrame("Texture", "i"..k, AT.UI.config)
+--  i:SetWidth(24)
+--  i:SetHeight(24)
+--  i:SetTexture("Rift", v.icon)
+--  i:SetPoint("TOPLEFT", c, "TOPRIGHT", 2, 0)
+--  i:SetLayer(15)
+--  local t = UI.CreateFrame("Text", "t"..k, AT.UI.config)
+--  t:SetFontSize(12)
+--  t:SetText(v.name[LANG])
+--  t:SetPoint("CENTERLEFT", i, "CENTERRIGHT", 2, 0)
+--  t:SetLayer(15)
+--  return c, i, t
+--end
 
 
 --
 -- User interface setup: Diamond widget, Configuration screen, HUD compass list
 --
+
 function AT.BuildUI()
   AT.context = UI.CreateContext(addon.identifier)
 
@@ -1097,6 +1221,7 @@ end
 --
 -- "Command line"
 --
+
 function AT.Command_Slash_Register(h, args)
   local r = {}
 
@@ -1104,10 +1229,12 @@ function AT.Command_Slash_Register(h, args)
     table.insert(r, token)
   end
 
+  -- No argument
   if r[1] == nil then
     print("Welcome to Artifact Tracker, an addon that will help you complete"..
     " the game 100% or make you rich. Try /at help for further instructions.");
 
+  -- Help message
   elseif r[1] == "help" then
     print("Valid commands are:")
     print("/at dump artifact\tCurrent artifact information.")
@@ -1115,7 +1242,7 @@ function AT.Command_Slash_Register(h, args)
     print("/at dump map     \tCurrent minimap information.")
     print("/at dump player  \tPlayer information.")
     print("/at area <\"\">  \tSelect area to track artifacts in.")
-    print("/at scan           \tScan and select the nearest artifact.")
+    print("/at scan [#]     \tScan and select the nearest artifact.")
     print("/at set <#>      \tSelect which artifact to track.")
     print("/at add <#>      \tSelect an additional artifact to track.")
     print("/at remove <#>   \tRemove one artifact from the list.")
@@ -1123,6 +1250,7 @@ function AT.Command_Slash_Register(h, args)
     print("/at reset         \tReset addon to default settings.")
     print("")
 
+  -- Select artifact area
   elseif r[1] == "area" then
     if ARTIFACTS[r[2]] == nil then
       print("Error: Invalid area selected. Try \"/at dump database\"")
@@ -1131,6 +1259,7 @@ function AT.Command_Slash_Register(h, args)
       print("Area sucessfully set to:", area)
     end
 
+  -- Dump various information
   elseif r[1] == "dump" then
     if r[2] == nil then
       print("Error: No second argument provided. Try \"/at help\".")
@@ -1154,52 +1283,21 @@ function AT.Command_Slash_Register(h, args)
       print(Utility.Serialize.Full(pd))
     end
 
+  -- Scan for the closest artifact (relative to player)
   elseif r[1] == "scan" then
-    -- TODO: reimplement and simplify
-    local pd          = Inspect.Unit.Detail("player")
-    local closest     = 999999
-    local close       = 999999
-    local distance    = nil
-    local cur_index   = 0
-    local best_index  = 0
-    local close_index = 0
-    for k,v in pairs(ARTIFACTS[area]) do
-      cur_index = cur_index + 1
-      distance  = AT.Distance(
-        {v[1], pd.coordY, v[2]},
-        {pd.coordX, pd.coordY, pd.coordZ})
-      print("k,v,d:", k, Utility.Serialize.Inline(v), distance)
-      if distance == nil then
-        print("Error: could not calculate distance.")
-        print(Utility.Serialize.Inline(pd))
-        print(Utility.Serialize.Inline(v))
-        break
-      end
-      if distance > 50 and distance < close then
-        close = distance
-        close_index = cur_index
-      end
-      if distance < closest then
-        print("closer")
-        closest    = distance
-        best_index = cur_index
-      end
+    local minimum_distance = 0
+    if type(r[2]) == "number" then
+      minimum_distance = r[2]
     end
-    if close_index == 0 then
-      print("Scanning done. No close artifact found.")
-    else
-      index = close_index
-      AT.ScanCurrentMap()
-      print("Scanning done. Close artifact: ", close_index)
-    end
-    if best_index == 0 then
+    local closest_artifact = AT.Closest(minimum_distance)
+    if closest_artifact == nil then
       print("Scanning done. No closest artifact found.")
     else
-      --index = best_index
-      --AT.ScanCurrentMap()
-      print("Scanning done. Closest artifact: ", best_index)
+      AT.ShowMessage(closest_artifact)
+      print("Scanning done. Closest artifact: ", closest_artifact.id)
     end
 
+  -- Select a fixed artifact to look for
   elseif r[1] == "set" then
     if r[2] == nil then
       print("Error: No second argument provided. Try /at help.")
@@ -1212,6 +1310,7 @@ function AT.Command_Slash_Register(h, args)
       AT.ScanCurrentMap()
     end
 
+  -- Add additional artifacts to look for
   elseif r[1] == "add" then
     local index = tonumber(r[2])
     if index == nil then
@@ -1220,13 +1319,14 @@ function AT.Command_Slash_Register(h, args)
       local artifact = {}
       artifact.id          = index
       artifact.description = area .. " Artifact " .. index
-      artifact.coordX      = ARTIFACTS[area][index][1]      -- east direction
-      artifact.coordY      = 1000                           -- up direction
-      artifact.coordZ      = ARTIFACTS[area][index][2]      -- south direction
+      artifact.coordX      = ARTIFACTS[area][index][1]  -- east direction
+      artifact.coordY      = 1000                       -- up direction
+      artifact.coordZ      = ARTIFACTS[area][index][2]  -- south direction
       print(string.format("Added %q", artifact.description))
       AT.Add(artifact)
     end
 
+  -- Remove one entry from the artifact list
   elseif r[1] == "remove" then
     local index = tonumber(r[2])
     if index == nil then
@@ -1235,16 +1335,17 @@ function AT.Command_Slash_Register(h, args)
       AT.Remove(i)
     end
 
+  -- Clear artifact list
   elseif r[1] == "clear" then
     AT.Clear()
 
+  -- Reset ArtifactTracker settings
   elseif r[1] == "reset" then
     if MINIMAPDOCKER then
       print("Not resetting button position. Location manged by Docker.")
     else
       ArtifactTracker_Settings.mmx = 100
       ArtifactTracker_Settings.mmy = 100
-
       print("Resetting location of control button to 100,100")
       AT.UI.mm:SetPoint(
         "TOPLEFT",
@@ -1253,7 +1354,6 @@ function AT.Command_Slash_Register(h, args)
         ArtifactTracker_Settings.mmx,
         ArtifactTracker_Settings.mmy)
     end
-
     print("Resetting location of tracker listing to 200,100")
     ArtifactTracker_Settings.trx = 200
     ArtifactTracker_Settings.try = 100
@@ -1263,7 +1363,6 @@ function AT.Command_Slash_Register(h, args)
       "TOPLEFT",
       ArtifactTracker_Settings.trx,
       ArtifactTracker_Settings.try)
-
     print("Resetting location of config screen to 300,300")
     ArtifactTracker_Settings.cfgx = 300
     ArtifactTracker_Settings.cfgy = 300
@@ -1273,17 +1372,17 @@ function AT.Command_Slash_Register(h, args)
       "TOPLEFT",
       ArtifactTracker_Settings.cfgx,
       ArtifactTracker_Settings.cfgy)
-
   else
     print("Unrecognized command.")
-
   end
 end
 
 
+--------------------------------------------------------------------------------
 --
 -- "Main"
 --
+--------------------------------------------------------------------------------
 
 AT.BuildUI()
 
