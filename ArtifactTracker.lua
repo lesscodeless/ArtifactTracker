@@ -2,8 +2,7 @@
 -- ArtifactTracker 1.0 by Cleraria
 --
 -- TODO:
---  * map player location to area name. OR rebuild the area based artifact table
---    to a global grid table
+--  * zoneless tracing, rebuild the zone based table to a global grid table
 --  * whilelist / blacklist
 --  * automatic detection of picked up artifacts
 --    * possible to save new locations
@@ -21,19 +20,13 @@ local addon, data = ...
 --
 --------------------------------------------------------------------------------
 
-local area          = "Stonefield"        -- default area
-local index         = 71                  -- default artifact in area
+local zone          = "Freemarch"  -- default zone
+local index         = 1            -- default artifact in zone
 local ARTIFACTS     = data.artifacts
 local ARTIFACT_ICON = "Data\\UI\\item_icons\\scroll6a.dds"
 local rgba_gold     = {255/255, 215/255, 0, 2/3}
 local rgba_green    = {0, 0.25, 0, 1/2}
 local rgba          = rgba_green
-
-area  = "Freemarch"
-index = 1
-
-_ARTIFACTTRACKER = {}
-local AT = _ARTIFACTTRACKER
 
 local default_settings = {
   mmx        = 200,
@@ -61,6 +54,46 @@ local AT_ACTIVE     = true   -- HUD active
 local prev_pd_a     = nil    -- cached copy of "player" (arrow updates)
 local prev_pd_s     = nil    -- cached copy of "player" (scan updates)
 local MESSAGE_STACK = {}     -- HUD message stack
+
+-- Maps direction name to arrow image
+local CX_IMAGES = {
+  ["E"]    = string.format("img/compass-E.png"),
+  ["ENE"]  = string.format("img/compass-ENE.png"),
+  ["ESE"]  = string.format("img/compass-ESE.png"),
+  ["N"]    = string.format("img/compass-N.png"),
+  ["NE"]   = string.format("img/compass-NE.png"),
+  ["NNE"]  = string.format("img/compass-NNE.png"),
+  ["NNW"]  = string.format("img/compass-NNW.png"),
+  ["NW"]   = string.format("img/compass-NW.png"),
+  ["S"]    = string.format("img/compass-S.png"),
+  ["SE"]   = string.format("img/compass-SE.png"),
+  ["SSE"]  = string.format("img/compass-SSE.png"),
+  ["SSW"]  = string.format("img/compass-SSW.png"),
+  ["SW"]   = string.format("img/compass-SW.png"),
+  ["W"]    = string.format("img/compass-W.png"),
+  ["WNW"]  = string.format("img/compass-WNW.png"),
+  ["WSW"]  = string.format("img/compass-WSW.png"),
+
+  ["eE"]   = string.format("img/Ecompass-E.png"),
+  ["eENE"] = string.format("img/Ecompass-ENE.png"),
+  ["eESE"] = string.format("img/Ecompass-ESE.png"),
+  ["eN"]   = string.format("img/Ecompass-N.png"),
+  ["eNE"]  = string.format("img/Ecompass-NE.png"),
+  ["eNNE"] = string.format("img/Ecompass-NNE.png"),
+  ["eNNW"] = string.format("img/Ecompass-NNW.png"),
+  ["eNW"]  = string.format("img/Ecompass-NW.png"),
+  ["eS"]   = string.format("img/Ecompass-S.png"),
+  ["eSE"]  = string.format("img/Ecompass-SE.png"),
+  ["eSSE"] = string.format("img/Ecompass-SSE.png"),
+  ["eSSW"] = string.format("img/Ecompass-SSW.png"),
+  ["eSW"]  = string.format("img/Ecompass-SW.png"),
+  ["eW"]   = string.format("img/Ecompass-W.png"),
+  ["eWNW"] = string.format("img/Ecompass-WNW.png"),
+  ["eWSW"] = string.format("img/Ecompass-WSW.png")
+}
+
+-- Prefix all functions with AT, i.e. use a local "namespace"
+local AT = {}
 
 
 
@@ -99,163 +132,11 @@ function AT.Distance(object1, object2)
   return math_sqrt((dx^2)+(dy^2)+(dz^2))  -- distance
 end
 
--- Scans the area for the closest artifact and returns it as a message.
--- Returns "nil" on failure.
-function AT.Closest(minimum_distance)
-    local player           = Inspect.Unit.Detail("player")
-    local closest_distance = 999999
-    local current_distance = nil
-    local current_index    = 0
-    local closest_index    = 0
 
-    -- Return nil on invalid input data
-    if player.coordX == nil or player.coordY == nil or player.coordZ == nil then
-      print("Warning: Player position data missing.")
-      return nil
-    end
-
-    -- For all data points in selected area
-    for k,v in pairs(ARTIFACTS[area]) do
-      current_index = current_index + 1
-      -- Calculate distance between artifact and player
-      current_distance = AT.Distance(
-        {
-          ["coordX"] = v[1],
-          ["coordY"] = player.coordY,
-          ["coordZ"] = v[2]
-        },
-        player)
-      if
-        current_distance > minimum_distance and
-        current_distance < closest_distance
-      then
-        closest_distance = current_distance
-        closest_index = current_index
-      end
-    end
-
-    -- Return nil on failure
-    if closest_index == 0 then
-      print("Warning: Could not find any artifact.")
-      return nil
-    end
-
-    -- TODO: remove the need for setting "index" (used in ScanCurrentMap)
-    index = closest_index
-
-    -- Return message on success
-    local artifact = {}
-    artifact.id          = closest_index
-    artifact.description = area .. " Artifact " .. closest_index
-    artifact.coordX      = ARTIFACTS[area][closest_index][1]  -- east direction
-    artifact.coordY      = player.coordY                      -- up direction
-    artifact.coordZ      = ARTIFACTS[area][closest_index][2]  -- south direction
-    return artifact
-end
-
-
-local function MergeTable(o, n)
-  for k,v in pairs(n) do
-    if type(v) == "table" then
-      if o[k] == nil then
-        o[k] = {}
-      end
-      if type(o[k]) == 'table' then
-        MergeTable(o[k], n[k])
-      end
-    else
-      if o[k] == nil then
-        o[k] = v
-      end
-    end
-  end
-end
-
-function AT.ShowMessage(m)
-
-  -- Do nothing with invalid messages
-  if m == nil then
-    print("Warning: Attempting to show invalid message.")
-    return
-  end
-
-  -- If message already exists, update time, then exit
-  local tx = Inspect.Time.Real()
-  local rq = true
-  for k,v in pairs(MESSAGE_STACK) do
-    if v.i == m.id then
-      MESSAGE_STACK[k].t = nil
-      rq = false
-      break
-    end
-  end
-
-  -- Calculate distance
-  local player = Inspect.Unit.Detail("player")
-  local distance = 10
-  if
-    player == nil or
-    player.coordX == nil or
-    player.coordY == nil or
-    player.coordZ == nil
-  then
-    print("Warning: Player data not available. Setting a default distance.")
-  else
-    distance = AT.Distance(m, player)
-  end
-
-  -- If message does not exist, add it on top (wtf?)
-  if rq then
-    table.insert(MESSAGE_STACK, 1, {
-      i = m.id,
-      t = nil,
-      x = m.coordX,
-      y = m.coordY,
-      z = m.coordZ,
-      n = m.description,
-      d = distance})
-  end
-
-  -- Trim list if it gets too big
-  if #MESSAGE_STACK > 10 then
-    table.remove(MESSAGE_STACK, 11)
-  end
-
-end
-
-function AT.Add(m)
-  print("AT.Add")
-  AT.ShowMessage(m)
-end
-
-function AT.Remove(i)
-  print("AT.Remove")
-  table.remove(MESSAGE_STACK, i)
-end
-
-function AT.Clear()
-  --print("AT.Clear")
-  MESSAGE_STACK = {}
-end
-
-function AT.DumpCurrentMap()
-  -- TODO: remove
-  print(Utility.Serialize.Full(Inspect.Map.Detail(Inspect.Map.List())))
-
-  --for k,v in pairs(Inspect.Map.Detail(Inspect.Map.List())) do
-  --  print(string.format(
-  --    "%s %s,%s,%s",
-  --    v.description,
-  --    v.coordX,
-  --    v.coordY,
-  --    v.coordZ))
-  --end
-end
-
-function AT.direction(dt)
+-- Maps angle to direction name
+function AT.Direction(dt)
   if dt >  180 then dt = dt-360 end
   if dt < -180 then dt = dt+360 end
-
   if     dt >= 169  then  d = "S"
   elseif dt >= 146  then  d = "SSW"
   elseif dt >= 124  then  d = "SW"
@@ -274,45 +155,160 @@ function AT.direction(dt)
   elseif dt >= -169 then  d = "SSE"
   else                    d = "S"
   end
-
   return {i="", l=d}
 end
 
-local CX_IMAGES = {
-  ["E"]    = string.format("img/compass-E.png"),
-  ["ENE"]  = string.format("img/compass-ENE.png"),
-  ["ESE"]  = string.format("img/compass-ESE.png"),
-  ["N"]    = string.format("img/compass-N.png"),
-  ["NE"]   = string.format("img/compass-NE.png"),
-  ["NNE"]  = string.format("img/compass-NNE.png"),
-  ["NNW"]  = string.format("img/compass-NNW.png"),
-  ["NW"]   = string.format("img/compass-NW.png"),
-  ["S"]    = string.format("img/compass-S.png"),
-  ["SE"]   = string.format("img/compass-SE.png"),
-  ["SSE"]  = string.format("img/compass-SSE.png"),
-  ["SSW"]  = string.format("img/compass-SSW.png"),
-  ["SW"]   = string.format("img/compass-SW.png"),
-  ["W"]    = string.format("img/compass-W.png"),
-  ["WNW"]  = string.format("img/compass-WNW.png"),
-  ["WSW"]  = string.format("img/compass-WSW.png"),
+-- Scans the zone for the closest artifact and returns it as a message.
+-- Returns "nil" on failure.
+function AT.Closest(minimum_distance)
+    local player           = Inspect.Unit.Detail("player")
+    local closest_distance = 999999
+    local current_distance = nil
+    local current_index    = 0
+    local closest_index    = 0
+    -- Return nil on invalid input data
+    if player.coordX == nil or player.coordY == nil or player.coordZ == nil then
+      print("Warning: Player position data missing.")
+      return nil
+    end
+    -- Update if zone information is available
+    if player.zone and Inspect.Zone.Detail(player.zone).name then
+      zone = Inspect.Zone.Detail(player.zone).name
+    end
+    -- For all data points in selected zone
+    for k,v in pairs(ARTIFACTS[zone]) do
+      current_index = current_index + 1
+      -- Calculate distance between artifact and player
+      current_distance = AT.Distance(
+        {
+          ["coordX"] = v[1],
+          ["coordY"] = player.coordY,
+          ["coordZ"] = v[2]
+        },
+        player)
+      if
+        current_distance > minimum_distance and
+        current_distance < closest_distance
+      then
+        closest_distance = current_distance
+        closest_index = current_index
+      end
+    end
+    -- Return nil on failure
+    if closest_index == 0 then
+      print("Warning: Could not find any artifact.")
+      return nil
+    end
+    -- TODO: remove the need for setting "index" (used in ScanCurrentMap)
+    index = closest_index
+    -- Return message on success
+    local artifact       = {}
+    artifact.id          = closest_index
+    artifact.description = zone .. " Artifact " .. closest_index
+    artifact.coordX      = ARTIFACTS[zone][closest_index][1]  -- east direction
+    artifact.coordY      = player.coordY                      -- up direction
+    artifact.coordZ      = ARTIFACTS[zone][closest_index][2]  -- south direction
+    return artifact
+end
 
-  ["eE"]   = string.format("img/Ecompass-E.png"),
-  ["eENE"] = string.format("img/Ecompass-ENE.png"),
-  ["eESE"] = string.format("img/Ecompass-ESE.png"),
-  ["eN"]   = string.format("img/Ecompass-N.png"),
-  ["eNE"]  = string.format("img/Ecompass-NE.png"),
-  ["eNNE"] = string.format("img/Ecompass-NNE.png"),
-  ["eNNW"] = string.format("img/Ecompass-NNW.png"),
-  ["eNW"]  = string.format("img/Ecompass-NW.png"),
-  ["eS"]   = string.format("img/Ecompass-S.png"),
-  ["eSE"]  = string.format("img/Ecompass-SE.png"),
-  ["eSSE"] = string.format("img/Ecompass-SSE.png"),
-  ["eSSW"] = string.format("img/Ecompass-SSW.png"),
-  ["eSW"]  = string.format("img/Ecompass-SW.png"),
-  ["eW"]   = string.format("img/Ecompass-W.png"),
-  ["eWNW"] = string.format("img/Ecompass-WNW.png"),
-  ["eWSW"] = string.format("img/Ecompass-WSW.png")
-}
+-- Displays the dimensions of the square that exactly encompasses all artifacts
+function AT.WorldSize()
+  local xz_min = {}
+  local xz_max = {}
+  xz_min["x"] = 99999999
+  xz_min["z"] = 99999999
+  xz_max["x"] = 0
+  xz_max["z"] = 0
+  for k,v in pairs(ARTIFACTS) do  -- k=zone, v=locations
+    for k,v in pairs(v) do        -- k=index, v=location
+      xz_min["x"] = math.min(xz_min["x"], v[1])
+      xz_min["z"] = math.min(xz_min["z"], v[2])
+      xz_max["x"] = math.max(xz_max["x"], v[1])
+      xz_max["z"] = math.max(xz_max["z"], v[2])
+    end
+  end
+  return xz_min, xz_max
+end
+
+function AT.Partition()
+end
+
+function AT.MergeTable(o, n)
+  for k,v in pairs(n) do
+    if type(v) == "table" then
+      if o[k] == nil then
+        o[k] = {}
+      end
+      if type(o[k]) == 'table' then
+        AT.MergeTable(o[k], n[k])
+      end
+    else
+      if o[k] == nil then
+        o[k] = v
+      end
+    end
+  end
+end
+
+-- Displays a message (artifact direction, name, distance) in the HUD
+function AT.ShowMessage(m)
+  -- Do nothing with invalid messages
+  if m == nil then
+    print("Warning: Attempting to show invalid message.")
+    return
+  end
+  -- If message already exists, update time, then exit
+  local tx = Inspect.Time.Real()
+  local rq = true
+  for k,v in pairs(MESSAGE_STACK) do
+    if v.i == m.id then
+      MESSAGE_STACK[k].t = nil
+      rq = false
+      break
+    end
+  end
+  -- Calculate distance
+  local player = Inspect.Unit.Detail("player")
+  local distance = 10
+  if
+    player == nil or
+    player.coordX == nil or
+    player.coordY == nil or
+    player.coordZ == nil
+  then
+    print("Warning: Player data not available. Setting a default distance.")
+  else
+    distance = AT.Distance(m, player)
+  end
+  -- If message does not exist, add it on top (wtf?)
+  if rq then
+    table.insert(MESSAGE_STACK, 1, {
+      i = m.id,
+      t = nil,
+      x = m.coordX,
+      y = m.coordY,
+      z = m.coordZ,
+      n = m.description,
+      d = distance})
+  end
+  -- Trim list if it gets too big
+  if #MESSAGE_STACK > 10 then
+    table.remove(MESSAGE_STACK, 11)
+  end
+end
+
+function AT.Remove(i)
+  print("AT.Remove list item:", i)
+  table.remove(MESSAGE_STACK, i)
+end
+
+function AT.Clear()
+  MESSAGE_STACK = {}
+end
+
+function AT.DumpCurrentMap()
+  print(Utility.Serialize.Full(Inspect.Map.Detail(Inspect.Map.List())))
+end
 
 -- Scans the minimap
 function AT.ScanCurrentMap()
@@ -337,15 +333,16 @@ function AT.ScanCurrentMap()
     -- Modification, add custom item (artifact)
     local artifact = {}
     artifact.id          = index
-    artifact.description = area .. " Artifact " .. index
-    artifact.coordX      = ARTIFACTS[area][index][1]      -- east direction
+    artifact.description = zone .. " Artifact " .. index
+    artifact.coordX      = ARTIFACTS[zone][index][1]      -- east direction
     artifact.coordY      = 1000                           -- up direction
-    artifact.coordZ      = ARTIFACTS[area][index][2]      -- south direction
+    artifact.coordZ      = ARTIFACTS[zone][index][2]      -- south direction
     print(string.format("Selected %q", artifact.description))
     AT.ShowMessage(artifact)
 
   end
 end
+
 
 --
 -- Event triggered functions
@@ -422,6 +419,8 @@ function AT.Event_System_Update_Begin(h)
         -- First time (uninitialized)
         if not prev_pd_s then
           prev_pd_s = pd
+          AT.Clear()
+          AT.ShowMessage(AT.Closest(0))
         end
         -- But only if player has moved at least 5 meters since last update
         if AT.Distance(pd, prev_pd_s) > 5 then
@@ -469,7 +468,7 @@ function AT.Event_System_Update_Begin(h)
               if     r_heading < -180 then r_heading = r_heading+360
               elseif r_heading >  360 then r_heading = r_heading-360
               end
-              local c = AT.direction(r_heading).l
+              local c = AT.Direction(r_heading).l
               -- If below
               if math.abs(pd.coordY - MESSAGE_STACK[x].y) > 10 then
                 MESSAGE_STACK[x].ixn = "e"..c
@@ -495,7 +494,7 @@ function AT.Event_System_Update_Begin(h)
             local dz = pd.coordZ - MESSAGE_STACK[x].z
             local d  = math_sqrt((dx^2)+(dy^2)+(dz^2))  -- distance
             local dr = math_atan(dx, dz)*180/math_pi    -- direction
-            local c  = AT.direction(dr).l
+            local c  = AT.Direction(dr).l
             -- If below
             if math.abs(pd.coordY - MESSAGE_STACK[x].y) > 10 then
               MESSAGE_STACK[x].ixn = "e"..c
@@ -749,7 +748,7 @@ function AT.BuildUI()
 
   --local frm_metal  = nil
   --local frm_fish   = nil
-  local frm_areas = nil
+  local frm_zones = nil
 
   local frm_p = nil
   local txt_w = 0
@@ -789,7 +788,7 @@ function AT.BuildUI()
   --  AT.ALLITEMS[v.name[LANG]] = IDX_FISH
   --end
 
-  -- List of areas
+  -- List of zones
   for k,v in pairs(ARTIFACTS) do
     local c, i, t
 
@@ -818,7 +817,7 @@ function AT.BuildUI()
     txt_w = math.max(txt_w, t:GetWidth())
 
     if frm_p == nil then
-      frm_areas = c
+      frm_zones = c
     else
       c:SetPoint("TOPLEFT", frm_p, "BOTTOMLEFT", 0, 0)
     end
@@ -835,7 +834,7 @@ function AT.BuildUI()
 
   -- Placement of material lists
   local colwidth = 52 + txt_w
-  frm_areas:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, trt)
+  frm_zones:SetPoint("TOPLEFT", AT.UI.config, "TOPLEFT", trl, trt)
 
   -- Configuration window height
   AT.UI.config:SetHeight(800)
@@ -1099,7 +1098,7 @@ function AT.Event_Addon_SavedVariables_Load_End(h, a)
       ArtifactTracker_Settings = {}
     end
 
-    MergeTable(ArtifactTracker_Settings, default_settings)
+    AT.MergeTable(ArtifactTracker_Settings, default_settings)
 
     if MINIMAPDOCKER then
       MINIMAPDOCKER.Register(addon.identifier, AT.UI.mm)
@@ -1237,26 +1236,29 @@ function AT.Command_Slash_Register(h, args)
   -- Help message
   elseif r[1] == "help" then
     print("Valid commands are:")
-    print("/at dump artifact\tCurrent artifact information.")
-    print("/at dump database\tArtifact count per area.")
-    print("/at dump map     \tCurrent minimap information.")
-    print("/at dump player  \tPlayer information.")
-    print("/at area <\"\">  \tSelect area to track artifacts in.")
-    print("/at scan [#]     \tScan and select the nearest artifact.")
-    print("/at set <#>      \tSelect which artifact to track.")
-    print("/at add <#>      \tSelect an additional artifact to track.")
-    print("/at remove <#>   \tRemove one artifact from the list.")
-    print("/at clear          \tClear all tracking entries.")
+    print("/at dump artifact\tCurrent artifact information (debug).")
+    print("/at dump database\tArtifact count per zone (info).")
+    print("/at dump map     \tCurrent minimap information (debug).")
+    print("/at dump player  \tPlayer information (debug).")
+    print("/at dump worldsize Total size spanned by artifacts (debug).")
+    print("/at dump zonename Zonename, e.g. Freemarch (debug).")
+    print("/at dump player  \tPlayer information (debug).")
+    print("/at zone <\"\">  \tSelect zone to track artifacts in (deprecated).")
+    print("/at scan [#] \t\tScan and select the nearest artifact (deprecated).")
+    print("/at set <#>      \tSelect which artifact to track (deprecated).")
+    print("/at add <#>  \tSelect an additional artifact to track (deprecated).")
+    print("/at remove <#>   \tRemove one artifact from the list (deprecated).")
+    print("/at clear          \tClear all tracking entries (deprecated).")
     print("/at reset         \tReset addon to default settings.")
     print("")
 
-  -- Select artifact area
-  elseif r[1] == "area" then
+  -- Select artifact zone
+  elseif r[1] == "zone" then
     if ARTIFACTS[r[2]] == nil then
-      print("Error: Invalid area selected. Try \"/at dump database\"")
+      print("Error: Invalid zone selected. Try \"/at dump database\"")
     else
-      area = r[2]
-      print("Area sucessfully set to:", area)
+      zone = r[2]
+      print("Area sucessfully set to:", zone)
     end
 
   -- Dump various information
@@ -1281,6 +1283,13 @@ function AT.Command_Slash_Register(h, args)
       local pd = Inspect.Unit.Detail("player")
       print("Player:")
       print(Utility.Serialize.Full(pd))
+    elseif r[2] == "worldsize" then
+      print("World size:")
+      min, max = AT.WorldSize()
+      print("Min x,z:", min.x, min.z)
+      print("Max x,z:", max.x, max.z)
+    elseif r[2] == "zonename" then
+      print(Inspect.Zone.Detail(Inspect.Unit.Detail("player").zone).name)
     end
 
   -- Scan for the closest artifact (relative to player)
@@ -1318,12 +1327,12 @@ function AT.Command_Slash_Register(h, args)
     else
       local artifact = {}
       artifact.id          = index
-      artifact.description = area .. " Artifact " .. index
-      artifact.coordX      = ARTIFACTS[area][index][1]  -- east direction
+      artifact.description = zone .. " Artifact " .. index
+      artifact.coordX      = ARTIFACTS[zone][index][1]  -- east direction
       artifact.coordY      = 1000                       -- up direction
-      artifact.coordZ      = ARTIFACTS[area][index][2]  -- south direction
+      artifact.coordZ      = ARTIFACTS[zone][index][2]  -- south direction
       print(string.format("Added %q", artifact.description))
-      AT.Add(artifact)
+      AT.ShowMessage(artifact)
     end
 
   -- Remove one entry from the artifact list
