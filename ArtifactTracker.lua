@@ -171,8 +171,12 @@ function AT.Closest(minimum_distance)
       print("Warning: Player position data missing.")
       return nil
     end
-    -- Update if zone information is available
-    if player.zone and Inspect.Zone.Detail(player.zone).name then
+    -- Update if zone information is available and valid
+    if
+      player.zone and
+      Inspect.Zone.Detail(player.zone).name and
+      ARTIFACTS[Inspect.Zone.Detail(player.zone).name]
+    then
       zone = Inspect.Zone.Detail(player.zone).name
     end
     -- For all data points in selected zone

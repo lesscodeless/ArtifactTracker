@@ -103,7 +103,7 @@ data.artifacts = {
     {5994, 7026},
   },
 
-  ["Iron_Pine_Peak"] = {
+  ["Iron Pine Peak"] = {
     {3266, 2325},
     {3266, 2325},
     {3333, 2331},
@@ -521,7 +521,7 @@ data.artifacts = {
     {1731, 2291},
   },
 
-  ["Scarwood_Reach"] = {
+  ["Scarwood Reach"] = {
     {3175, 3836},
     {3175, 3836},
     {3608, 3501},
@@ -588,7 +588,7 @@ data.artifacts = {
     {3796, 3979},
   },
 
-  ["Moonshade_Highlands"] = {
+  ["Moonshade Highlands"] = {
     {5648, 2167},
     {5648, 2167},
     {5725, 2317},
@@ -794,7 +794,7 @@ data.artifacts = {
     {4983, 2439},
   },
 
-  ["Scarlet_Gorge"] = {
+  ["Scarlet Gorge"] = {
     {3765, 3220},
     {3765, 3220},
     {3790, 2791},
