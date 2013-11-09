@@ -2,7 +2,7 @@
 -- ArtifactTracker 1.0 by Cleraria
 --
 -- TODO:
---  * zoneless tracing, rebuild the zone based table to a global grid table
+--  * zoneless tracking, rebuild the zone based table to a global grid table
 --  * whilelist / blacklist
 --  * automatic detection of picked up artifacts
 --    * possible to save new locations
@@ -161,17 +161,13 @@ end
 -- Scans the zone for the closest artifact and returns it as a message.
 -- Returns "nil" on failure.
 function AT.Closest(minimum_distance)
-    local player           = Inspect.Unit.Detail("player")
-    local closest_distance = 999999
-    local current_distance = nil
-    local current_index    = 0
-    local closest_index    = 0
-    -- Return nil on invalid input data
+    -- Return nil when player position is unavailable
+    local player = Inspect.Unit.Detail("player")
     if player.coordX == nil or player.coordY == nil or player.coordZ == nil then
       print("Warning: Player position data missing.")
       return nil
     end
-    -- Update if zone information is available and valid
+    -- Update current zone information when possible
     if
       player.zone and
       Inspect.Zone.Detail(player.zone).name and
@@ -179,10 +175,13 @@ function AT.Closest(minimum_distance)
     then
       zone = Inspect.Zone.Detail(player.zone).name
     end
-    -- For all data points in selected zone
+    -- Calculate distance between each artifact in the zone and the player
+    local closest_distance = 999999
+    local closest_index    = 0
+    local current_distance = nil
+    local current_index    = 0
     for k,v in pairs(ARTIFACTS[zone]) do
       current_index = current_index + 1
-      -- Calculate distance between artifact and player
       current_distance = AT.Distance(
         {
           ["coordX"] = v[1],
@@ -203,8 +202,6 @@ function AT.Closest(minimum_distance)
       print("Warning: Could not find any artifact.")
       return nil
     end
-    -- TODO: remove the need for setting "index" (used in ScanCurrentMap)
-    index = closest_index
     -- Return message on success
     local artifact       = {}
     artifact.id          = closest_index
@@ -216,6 +213,7 @@ function AT.Closest(minimum_distance)
 end
 
 -- Displays the dimensions of the square that exactly encompasses all artifacts
+-- TODO: remove
 function AT.WorldSize()
   local xz_min = {}
   local xz_max = {}
@@ -232,9 +230,6 @@ function AT.WorldSize()
     end
   end
   return xz_min, xz_max
-end
-
-function AT.Partition()
 end
 
 function AT.MergeTable(o, n)
@@ -258,7 +253,10 @@ end
 function AT.ShowMessage(m)
   -- Do nothing with invalid messages
   if m == nil then
-    print("Warning: Attempting to show invalid message.")
+    return
+  end
+  -- Do nothing until saved variables has been loaded
+  if not SVLOADED then
     return
   end
   -- If message already exists, update time, then exit
@@ -271,18 +269,17 @@ function AT.ShowMessage(m)
       break
     end
   end
-  -- Calculate distance
   local player = Inspect.Unit.Detail("player")
   local distance = 10
   if
-    player == nil or
-    player.coordX == nil or
-    player.coordY == nil or
-    player.coordZ == nil
+    player and
+    player.coordX and
+    player.coordY and
+    player.coordZ
   then
-    print("Warning: Player data not available. Setting a default distance.")
-  else
     distance = AT.Distance(m, player)
+  else
+    print("Warning: Player data not available. Setting a default distance.")
   end
   -- If message does not exist, add it on top (wtf?)
   if rq then
@@ -319,32 +316,39 @@ function AT.ScanCurrentMap()
 
   -- TODO: remove
   print("Scanning current map.")
+  AT.ShowMessage(AT.Closest(0))
 
-  if SVLOADED then
-    for k,v in pairs(MESSAGE_STACK) do
-      AT.UI.msgframes[k]:SetVisible(false)
-    end
-    MESSAGE_STACK = {}
+  --if SVLOADED then
+  --  for k,v in pairs(MESSAGE_STACK) do
+  --    AT.UI.msgframes[k]:SetVisible(false)
+  --  end
+  --  --MESSAGE_STACK = {}
 
-    -- Scans for and adds selected types of items found on minimap
-    --for k,v in pairs(Inspect.Map.Detail(Inspect.Map.List())) do
-    --  if ArtifactTracker_Settings.tracked[v.description] then
-    --    AT.ShowMessage(v)
-    --  end
-    --end
+  --  -- Scans for and adds selected types of items found on minimap
+  --  --for k,v in pairs(Inspect.Map.Detail(Inspect.Map.List())) do
+  --  --  if ArtifactTracker_Settings.tracked[v.description] then
+  --  --    AT.ShowMessage(v)
+  --  --  end
+  --  --end
 
-    -- TODO: remove
-    -- Modification, add custom item (artifact)
-    local artifact = {}
-    artifact.id          = index
-    artifact.description = zone .. " Artifact " .. index
-    artifact.coordX      = ARTIFACTS[zone][index][1]      -- east direction
-    artifact.coordY      = 1000                           -- up direction
-    artifact.coordZ      = ARTIFACTS[zone][index][2]      -- south direction
-    print(string.format("Selected %q", artifact.description))
-    AT.ShowMessage(artifact)
+  --  --local m = AT.Closest(0)
+  --  --if m == nil then
+  --  --  print("No closest.")
+  --  --else
+  --  --  print("Closest:", Utility.Serialize.Full(m))
+  --  --end
+  --  ---- TODO: remove
+  --  ---- Modification, add custom item (artifact)
+  --  --local artifact = {}
+  --  --artifact.id          = index
+  --  --artifact.description = zone .. " Artifact " .. index
+  --  --artifact.coordX      = ARTIFACTS[zone][index][1]      -- east direction
+  --  --artifact.coordY      = 1000                           -- up direction
+  --  --artifact.coordZ      = ARTIFACTS[zone][index][2]      -- south direction
+  --  --print(string.format("Selected %q", artifact.description))
+  --  --AT.ShowMessage(artifact)
 
-  end
+  --end
 end
 
 
@@ -393,15 +397,23 @@ function AT.Event_Map_Add(h, e)
 end
 
 
-local resort_req            = false
-local alpha                 = 0
-local rpt                   = 0
-local last_direction_update = 0
-local last_closest_update   = 0
+local resort_req  = false
+local alpha       = 0
+local rpt         = 0
+local last_update = 0
 
 function AT.Event_System_Update_Begin(h)
+
   -- Time of entering this function
   local timenow = Inspect.Time.Real()
+
+  -- At startup no artifacts is in the list, so start by showing the closest one
+  if #MESSAGE_STACK == 0 then
+    if timenow - last_update > 0.5 then
+      last_update = timenow
+      AT.ShowMessage(AT.Closest(0))
+    end
+  end
 
   -- When there are artifacts
   if #MESSAGE_STACK > 0 then
@@ -410,8 +422,8 @@ function AT.Event_System_Update_Begin(h)
     local pd = Inspect.Unit.Detail("player")
 
     -- Every 100ms
-    if timenow - last_direction_update > 0.1 then
-      last_direction_update = timenow
+    if timenow - last_update > 0.1 then
+      last_update = timenow
 
       -- Attempt to update closest artifact
       if
@@ -1265,6 +1277,11 @@ function AT.Command_Slash_Register(h, args)
       print("Area sucessfully set to:", zone)
     end
 
+  -- Addon recent CPU usage information
+  elseif r[1] == "cpu" then
+    local cpu_usage = Inspect.Addon.Cpu()
+    print("CPU usage:", Utility.Serialize.Full(cpu_usage))
+
   -- Dump various information
   elseif r[1] == "dump" then
     if r[2] == nil then
@@ -1428,5 +1445,22 @@ Command.Event.Attach(
   Command.Slash.Register("at"),
   AT.Command_Slash_Register,
   "Command.Slash.Register")
+
+-- TODO: remove
+--function AT.EventItemSlot(updates)
+--  print("AT.EventItemSlot:")
+--  --print(Utility.Serialize.Full(updates))
+--  if updates == false then
+--    print("False.")
+--  end
+--  for k,v in pairs(updates) do
+--    print("slot identifier: ", k)
+--    print("item identifier: ", v)
+--  end
+--end
+--Command.Event.Attach(
+--  Event.Item.Slot,
+--  AT.EventItemSlot,
+--  "Event.Item.Slot")
 
 print(string.format("v%s loaded.", addon.toc.Version))
